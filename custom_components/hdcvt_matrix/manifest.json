@@ -1,11 +1,17 @@
 {
   "domain": "hdcvt_matrix",
   "name": "HDCVT HDMI Matrix",
-  "codeowners": ["@paulbuechner"],
+  "codeowners": [
+    "@paulbuechner"
+  ],
   "config_flow": true,
   "dhcp": [
-    { "macaddress": "6CDFFB*" },
-    { "hostname": "ip-module-*" }
+    {
+      "macaddress": "6CDFFB*"
+    },
+    {
+      "hostname": "ip-module-*"
+    }
   ],
   "documentation": "https://github.com/paulbuechner/ha-hdcvt_matrix",
   "integration_type": "device",
