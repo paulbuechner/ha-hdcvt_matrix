@@ -47,6 +47,39 @@ CMD_PRESET_SET: Final = "preset set"
 CMD_PRESET_SAVE: Final = "preset save"
 CMD_TX_STREAM: Final = "tx stream"
 CMD_SET_AUDIO_MUTE: Final = "set output audio mute"
+CMD_TX_HDCP: Final = "tx hdcp"
+# The web UI's own command map says "video scaler", but the firmware rejects
+# that and only answers to "set video scaler". Verified against the device.
+CMD_SET_SCALER: Final = "set video scaler"
+CMD_SET_PANEL_LOCK: Final = "set panel lock"
+CMD_SET_BEEP: Final = "set beep"
+CMD_CEC_COMMAND: Final = "cec command"
+
+# CEC targets. "port" is a mask over all ports, not a port number, and it is
+# passed per command: it does not disturb the selection stored by
+# "set cec index".
+CEC_OBJECT_INPUT: Final = 0
+CEC_OBJECT_OUTPUT: Final = 1
+
+# Output CEC command ids. Inputs use a *different* numbering for the same
+# actions (1 = on, 2 = off), so do not reuse these for CEC_OBJECT_INPUT.
+CEC_OUTPUT_POWER_ON: Final = 0
+CEC_OUTPUT_POWER_OFF: Final = 1
+
+# Firmware value -> option key. Labels live in the translation files.
+HDCP_MODES: Final[dict[int, str]] = {
+    1: "hdcp_1_4",
+    2: "hdcp_2_2",
+    3: "follow_sink",
+    4: "follow_source",
+    5: "off",
+}
+# Note the gap: the firmware has no scaler mode 2.
+SCALER_MODES: Final[dict[int, str]] = {
+    0: "bypass",
+    1: "downscale_4k_to_1080p",
+    3: "auto",
+}
 
 
 class _ResponseLike(Protocol):
@@ -130,6 +163,12 @@ class MatrixState:
     # Output stream enabled, and output audio muted.
     output_enabled: list[bool] = field(default_factory=list)
     audio_muted: list[bool] = field(default_factory=list)
+    # Raw per-output mode values; see HDCP_MODES and SCALER_MODES.
+    hdcp_modes: list[int] = field(default_factory=list)
+    scaler_modes: list[int] = field(default_factory=list)
+    # Front panel state.
+    panel_locked: bool = False
+    beep_enabled: bool = False
 
     @property
     def input_count(self) -> int:
@@ -270,6 +309,7 @@ class HdcvtMatrixClient:
 
         outputs = await self._async_command({KEY_COMHEAD: CMD_GET_OUTPUT_STATUS})
         inputs = await self._async_command({KEY_COMHEAD: CMD_GET_INPUT_STATUS})
+        system = await self._async_command({KEY_COMHEAD: CMD_GET_SYSTEM_STATUS})
 
         # Array-valued fields carry one trailing "all ports" aggregate that the
         # web UI uses for its bulk controls. Trim it off using the port names,
@@ -287,6 +327,10 @@ class HdcvtMatrixClient:
             output_connected=_bool_list(outputs.get("allconnect"), outs),
             output_enabled=_bool_list(outputs.get("allout"), outs),
             audio_muted=_bool_list(outputs.get("allaudiomute"), outs),
+            hdcp_modes=_int_list(outputs.get("allhdcp"))[:outs],
+            scaler_modes=_int_list(outputs.get("allscaler"))[:outs],
+            panel_locked=bool(system.get("lock", 0)),
+            beep_enabled=bool(system.get("beep", 0)),
         )
 
     async def async_get_raw_snapshot(self) -> dict[str, Any]:
@@ -345,6 +389,52 @@ class HdcvtMatrixClient:
             {KEY_COMHEAD: CMD_SET_AUDIO_MUTE, "mute": [output, int(muted)]}
         )
         _raise_for_result(data, f"setting audio mute on output {output}")
+
+    async def async_set_hdcp_mode(self, output: int, mode: int) -> None:
+        """Set the HDCP mode on a one-based output. See HDCP_MODES."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_TX_HDCP, "hdcp": [output, mode]}
+        )
+        _raise_for_result(data, f"setting HDCP mode on output {output}")
+
+    async def async_set_scaler_mode(self, output: int, mode: int) -> None:
+        """Set the scaler mode on a one-based output. See SCALER_MODES."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_SCALER, "scaler": [output, mode]}
+        )
+        _raise_for_result(data, f"setting scaler mode on output {output}")
+
+    async def async_set_panel_locked(self, *, locked: bool) -> None:
+        """Lock or unlock the front panel buttons."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_PANEL_LOCK, "lock": int(locked)}
+        )
+        _raise_for_result(data, "setting the panel lock")
+
+    async def async_send_cec(
+        self, *, object_type: int, port_mask: list[int], command: int
+    ) -> None:
+        """Send a CEC command to the ports set in ``port_mask``.
+
+        The matrix goes briefly unresponsive afterwards, which is why every
+        command on this client is serialised behind one lock.
+        """
+        data = await self._async_command(
+            {
+                KEY_COMHEAD: CMD_CEC_COMMAND,
+                "object": object_type,
+                "port": port_mask,
+                "index": command,
+            }
+        )
+        _raise_for_result(data, f"sending CEC command {command}")
+
+    async def async_set_beep(self, *, enabled: bool) -> None:
+        """Turn the front panel beeper on or off."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_BEEP, "beep": int(enabled)}
+        )
+        _raise_for_result(data, "setting the beeper")
 
 
 def _raise_for_result(data: dict[str, Any], action: str) -> None:

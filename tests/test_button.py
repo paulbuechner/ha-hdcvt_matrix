@@ -78,3 +78,79 @@ async def test_unavailable_in_standby(
         er.async_get(hass).async_get_entity_id("button", DOMAIN, f"{MAC}_save_preset_1")
         is None
     )
+
+
+def display_id(hass: HomeAssistant, output: int, action: str) -> str:
+    """Resolve a CEC display power button by unique id."""
+    resolved = er.async_get(hass).async_get_entity_id(
+        "button", DOMAIN, f"{MAC}_output_{output}_display_{action}"
+    )
+    assert resolved is not None
+    return resolved
+
+
+async def test_display_power_sends_a_port_mask(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """CEC targets a mask over all ports, not a port number."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        BUTTON_DOMAIN,
+        SERVICE_PRESS,
+        {ATTR_ENTITY_ID: display_id(hass, 3, "on")},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "cec command"]
+    assert calls == [
+        {
+            "comhead": "cec command",
+            "object": 1,
+            "port": [0, 0, 1, 0, 0, 0, 0, 0],
+            "index": 0,
+        }
+    ]
+
+
+async def test_display_off_uses_the_output_numbering(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Outputs use 0=on and 1=off; inputs number the same actions differently."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        BUTTON_DOMAIN,
+        SERVICE_PRESS,
+        {ATTR_ENTITY_ID: display_id(hass, 1, "off")},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "cec command"]
+    assert calls[0]["index"] == 1
+    assert calls[0]["port"] == [1, 0, 0, 0, 0, 0, 0, 0]
+
+
+async def test_display_buttons_ignore_sink_detection(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """A display in standby may drop HPD, so the wake button must survive it."""
+    await setup_integration(
+        make_session(
+            overrides={
+                "get output status": {
+                    "comhead": "get output status",
+                    "power": 1,
+                    "allconnect": [0] * 8,
+                    "allhdcp": [3] * 9,
+                    "allscaler": [0] * 9,
+                    "allout": [1] * 9,
+                    "allaudiomute": [1] * 9,
+                }
+            }
+        )
+    )
+
+    state = hass.states.get(display_id(hass, 1, "on"))
+    assert state is not None
+    assert state.state != "unavailable"

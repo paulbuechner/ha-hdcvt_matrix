@@ -67,11 +67,23 @@
     "button": {
       "save_preset": {
         "name": "Save {name}"
+      },
+      "display_on": {
+        "name": "{name} display on"
+      },
+      "display_off": {
+        "name": "{name} display off"
       }
     },
     "switch": {
       "power": {
         "name": "Power"
+      },
+      "panel_lock": {
+        "name": "Front panel lock"
+      },
+      "beep": {
+        "name": "Beeper"
       },
       "output_stream": {
         "name": "{name} stream"
@@ -86,6 +98,24 @@
       },
       "output": {
         "name": "{name}"
+      },
+      "output_hdcp": {
+        "name": "{name} HDCP",
+        "state": {
+          "hdcp_1_4": "HDCP 1.4",
+          "hdcp_2_2": "HDCP 2.2",
+          "follow_sink": "Follow sink",
+          "follow_source": "Follow source",
+          "off": "Off"
+        }
+      },
+      "output_scaler": {
+        "name": "{name} scaler",
+        "state": {
+          "bypass": "Bypass",
+          "downscale_4k_to_1080p": "4K to 1080p",
+          "auto": "Auto"
+        }
       }
     }
   },

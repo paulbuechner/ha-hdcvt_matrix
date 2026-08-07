@@ -207,3 +207,54 @@ async def test_output_switches_are_config_category(
     entry = er.async_get(hass).async_get(output_switch_id(hass, 1, "stream"))
     assert entry is not None
     assert entry.entity_category == EntityCategory.CONFIG
+
+
+def panel_id(hass: HomeAssistant, key: str) -> str:
+    """Resolve a front panel switch by unique id."""
+    resolved = er.async_get(hass).async_get_entity_id("switch", DOMAIN, f"{MAC}_{key}")
+    assert resolved is not None
+    return resolved
+
+
+async def test_panel_lock_reflects_the_device(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The fixture reports the panel unlocked and the beeper off."""
+    await setup_integration(make_session())
+
+    assert get_state(hass, panel_id(hass, "panel_lock")).state == STATE_OFF
+    assert get_state(hass, panel_id(hass, "beep")).state == STATE_OFF
+
+
+async def test_panel_lock_sends_a_scalar_not_an_array(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Unlike the per-output commands, lock takes a bare int."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_ON,
+        {ATTR_ENTITY_ID: panel_id(hass, "panel_lock")},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "set panel lock"]
+    assert calls == [{"comhead": "set panel lock", "lock": 1}]
+
+
+async def test_beep_sends_a_scalar(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Same shape for the beeper."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_ON,
+        {ATTR_ENTITY_ID: panel_id(hass, "beep")},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "set beep"]
+    assert calls == [{"comhead": "set beep", "beep": 1}]

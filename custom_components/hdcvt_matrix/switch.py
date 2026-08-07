@@ -24,13 +24,65 @@ async def async_setup_entry(  # NOSONAR
     entry: HdcvtMatrixConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the power switch, plus stream and mute switches per output."""
+    """Set up power and panel switches, plus stream and mute per output."""
     coordinator = entry.runtime_data
-    entities: list[SwitchEntity] = [HdcvtMatrixPowerSwitch(coordinator)]
+    entities: list[SwitchEntity] = [
+        HdcvtMatrixPowerSwitch(coordinator),
+        HdcvtMatrixPanelLockSwitch(coordinator),
+        HdcvtMatrixBeepSwitch(coordinator),
+    ]
     for output in range(1, coordinator.data.output_count + 1):
         entities.append(HdcvtMatrixOutputSwitch(coordinator, output))
         entities.append(HdcvtMatrixMuteSwitch(coordinator, output))
     async_add_entities(entities)
+
+
+class HdcvtMatrixPanelLockSwitch(HdcvtMatrixEntity, SwitchEntity):
+    """Lock the physical buttons on the front of the matrix."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "panel_lock"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the panel lock switch."""
+        super().__init__(coordinator, "panel_lock")
+
+    @property
+    def is_on(self) -> bool:
+        """True when the front panel is locked."""
+        return self.coordinator.data.panel_locked
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Lock the front panel."""
+        await self.coordinator.async_set_panel_locked(locked=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Unlock the front panel."""
+        await self.coordinator.async_set_panel_locked(locked=False)
+
+
+class HdcvtMatrixBeepSwitch(HdcvtMatrixEntity, SwitchEntity):
+    """The beep the matrix makes on a front panel press."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "beep"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the beeper switch."""
+        super().__init__(coordinator, "beep")
+
+    @property
+    def is_on(self) -> bool:
+        """True when the beeper is enabled."""
+        return self.coordinator.data.beep_enabled
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable the beeper."""
+        await self.coordinator.async_set_beep(enabled=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Silence the beeper."""
+        await self.coordinator.async_set_beep(enabled=False)
 
 
 class _OutputSwitch(HdcvtMatrixEntity, SwitchEntity):

@@ -216,3 +216,90 @@ async def test_device_refusal_surfaces(
 
     assert get_state(hass, target).state == STATE_UNKNOWN
     assert session.requests[-1] == {"comhead": "preset set", "index": 1}
+
+
+def mode_id(hass: HomeAssistant, output: int, key: str) -> str:
+    """Resolve a per-output mode select by unique id."""
+    resolved = er.async_get(hass).async_get_entity_id(
+        "select", DOMAIN, f"{MAC}_output_{output}_{key}"
+    )
+    assert resolved is not None
+    return resolved
+
+
+async def test_hdcp_maps_firmware_values_to_labels(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The fixture reports mode 3, which is Follow sink."""
+    await setup_integration(make_session())
+
+    state = get_state(hass, mode_id(hass, 1, "hdcp"))
+    assert state.state == "follow_sink"
+    assert state.attributes["options"] == [
+        "hdcp_1_4",
+        "hdcp_2_2",
+        "follow_sink",
+        "follow_source",
+        "off",
+    ]
+
+
+async def test_hdcp_selection_sends_the_firmware_value(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Picking HDCP 2.2 sends value 2, not the option's list position."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: mode_id(hass, 6, "hdcp"), ATTR_OPTION: "hdcp_2_2"},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "tx hdcp"]
+    assert calls == [{"comhead": "tx hdcp", "hdcp": [6, 2]}]
+
+
+async def test_scaler_options_skip_the_missing_mode(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The firmware has no scaler mode 2, so auto must send 3 rather than 2."""
+    session = await setup_integration(make_session())
+
+    state = get_state(hass, mode_id(hass, 1, "scaler"))
+    assert state.state == "bypass"
+    assert state.attributes["options"] == ["bypass", "downscale_4k_to_1080p", "auto"]
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: mode_id(hass, 2, "scaler"), ATTR_OPTION: "auto"},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "set video scaler"]
+    assert calls == [{"comhead": "set video scaler", "scaler": [2, 3]}]
+
+
+async def test_unknown_firmware_mode_reads_as_none(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """A value we have no label for must read unknown, not crash or guess."""
+    await setup_integration(
+        make_session(
+            overrides={
+                "get output status": {
+                    "comhead": "get output status",
+                    "power": 1,
+                    "allconnect": [1] * 8,
+                    "allhdcp": [99] * 9,
+                    "allscaler": [0] * 9,
+                    "allout": [1] * 9,
+                    "allaudiomute": [1] * 9,
+                }
+            }
+        )
+    )
+
+    assert get_state(hass, mode_id(hass, 1, "hdcp")).state == STATE_UNKNOWN

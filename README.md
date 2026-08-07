@@ -9,8 +9,20 @@ Local control for HDCVT web-controlled HDMI matrices (tested on **HDP-MXC88A**, 
 | Entity | Platform | Notes |
 | --- | --- | --- |
 | Power | `switch` | On, or standby |
-| *one per output* | `select` | Which input feeds that output, by the names set on the device |
+| *one per output* | `select` | Which input feeds that output |
 | Preset | `select` | Recalls a stored routing preset |
+| Save *preset* | `button` | Overwrites a preset with the current routing |
+| *output* HDCP | `select` | HDCP 1.4 / 2.2 / follow sink / follow source / off |
+| *output* scaler | `select` | Bypass / 4K to 1080p / auto |
+| *output* stream | `switch` | Enable or disable the HDMI output |
+| *output* audio mute | `switch` | Mute the output's audio |
+| *input* signal | `binary_sensor` | A source is detected, diagnostic |
+| *output* display | `binary_sensor` | A sink is detected, diagnostic |
+| *output* display on / off | `button` | Powers the attached display over CEC |
+| Front panel lock | `switch` | Locks the physical buttons |
+| Beeper | `switch` | Front panel beep |
+
+CEC is one-way here: the matrix sends the command but cannot report whether the display obeyed, or what state it is in. Hence buttons rather than a switch. They stay available even when no sink is detected, because a display in standby may drop hotplug detect — which would otherwise hide the button that wakes it.
 
 Port counts come from the device, so a 4×4 gets four routing selects and an 8×8 gets eight.
 
@@ -54,6 +66,15 @@ curl -s -X POST http://<matrix>/cgi-bin/instr \
 | `preset save` | `index` | stores the current routing |
 | `preset clear` | `index` | not yet used |
 | `preset name` | `index`, `name` | not yet used |
+| `tx stream` | `out: [output, 0\|1]` | enable the output |
+| `set output audio mute` | `mute: [output, 0\|1]` | |
+| `tx hdcp` | `hdcp: [output, mode]` | 1=1.4, 2=2.2, 3=follow sink, 4=follow source, 5=off |
+| `set video scaler` | `scaler: [output, mode]` | 0=bypass, 1=4K→1080p, 3=auto. **Not** `video scaler`, which the web UI's own command map claims and the firmware rejects |
+| `set panel lock` | `lock: 0\|1` | scalar, not an array |
+| `set beep` | `beep: 0\|1` | scalar, not an array |
+| `set edid` | `edid: [input, id]` | not yet used; the id-to-name map still needs digging out |
+| `cec command` | `object`, `port`, `index` | `object` 0=input 1=output; `port` is a **mask over all ports**, not a port number; outputs number power as 0=on 1=off, inputs as 1=on 2=off |
+| `set cec index` | `inputindex`, `outputindex` | persists the UI's port selection; not needed, since `cec command` carries its own mask |
 
 Two traps worth knowing:
 

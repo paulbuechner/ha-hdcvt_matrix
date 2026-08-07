@@ -13,6 +13,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
+    CEC_OBJECT_OUTPUT,
     HdcvtMatrixClient,
     MatrixAuthError,
     MatrixError,
@@ -131,6 +132,69 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             self.client.async_set_audio_muted(output, muted=muted),
             f"set audio mute on output {output}",
             apply,
+        )
+
+    async def async_set_hdcp_mode(self, output: int, mode: int) -> None:
+        """Set the HDCP mode on a one-based output."""
+
+        def apply() -> None:
+            if output <= len(self.data.hdcp_modes):
+                self.data.hdcp_modes[output - 1] = mode
+
+        await self._async_write(
+            self.client.async_set_hdcp_mode(output, mode),
+            f"set the HDCP mode on output {output}",
+            apply,
+        )
+
+    async def async_set_scaler_mode(self, output: int, mode: int) -> None:
+        """Set the scaler mode on a one-based output."""
+
+        def apply() -> None:
+            if output <= len(self.data.scaler_modes):
+                self.data.scaler_modes[output - 1] = mode
+
+        await self._async_write(
+            self.client.async_set_scaler_mode(output, mode),
+            f"set the scaler mode on output {output}",
+            apply,
+        )
+
+    async def async_set_panel_locked(self, *, locked: bool) -> None:
+        """Lock or unlock the front panel."""
+
+        def apply() -> None:
+            self.data.panel_locked = locked
+
+        await self._async_write(
+            self.client.async_set_panel_locked(locked=locked),
+            "set the panel lock",
+            apply,
+        )
+
+    async def async_set_beep(self, *, enabled: bool) -> None:
+        """Turn the front panel beeper on or off."""
+
+        def apply() -> None:
+            self.data.beep_enabled = enabled
+
+        await self._async_write(
+            self.client.async_set_beep(enabled=enabled), "set the beeper", apply
+        )
+
+    async def async_send_output_cec(self, output: int, command: int) -> None:
+        """Send a CEC command to the display on a one-based output."""
+        mask = [
+            1 if port == output - 1 else 0 for port in range(self.data.output_count)
+        ]
+        await self._async_write(
+            self.client.async_send_cec(
+                object_type=CEC_OBJECT_OUTPUT, port_mask=mask, command=command
+            ),
+            f"send a CEC command to output {output}",
+            # Nothing to reflect: CEC is fire and forget, and the matrix cannot
+            # report whether the display acted on it.
+            None,
         )
 
     async def async_save_preset(self, index: int) -> None:

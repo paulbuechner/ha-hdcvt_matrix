@@ -67,11 +67,23 @@
     "button": {
       "save_preset": {
         "name": "{name} speichern"
+      },
+      "display_on": {
+        "name": "{name} Anzeige ein"
+      },
+      "display_off": {
+        "name": "{name} Anzeige aus"
       }
     },
     "switch": {
       "power": {
         "name": "Strom"
+      },
+      "panel_lock": {
+        "name": "Tastensperre"
+      },
+      "beep": {
+        "name": "Signalton"
       },
       "output_stream": {
         "name": "{name} Stream"
@@ -86,6 +98,24 @@
       },
       "output": {
         "name": "{name}"
+      },
+      "output_hdcp": {
+        "name": "{name} HDCP",
+        "state": {
+          "hdcp_1_4": "HDCP 1.4",
+          "hdcp_2_2": "HDCP 2.2",
+          "follow_sink": "Senke folgen",
+          "follow_source": "Quelle folgen",
+          "off": "Aus"
+        }
+      },
+      "output_scaler": {
+        "name": "{name} Skalierer",
+        "state": {
+          "bypass": "Durchleiten",
+          "downscale_4k_to_1080p": "4K auf 1080p",
+          "auto": "Automatisch"
+        }
       }
     }
   },
