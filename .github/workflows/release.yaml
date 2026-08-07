@@ -1,44 +1,82 @@
 name: Release
 
+# Releases are made from the Actions tab: pick a version, press Run. The
+# workflow bumps the manifest, commits, tags and publishes with the zip
+# attached. It is the only path, deliberately -- hacs.json sets
+# zip_release, so a release without that asset would break installs, and a
+# release drafted by hand in the UI would have no asset.
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without a leading v (e.g. 0.2.0)"
+        required: true
+        type: string
 
 permissions: {}
 
 jobs:
+  # Same checks as every push. A one-click button should not be able to
+  # publish a tree that does not pass them.
+  verify:
+    uses: ./.github/workflows/validate.yaml
+
   release:
-    name: Publish release asset
+    name: Publish ${{ inputs.version }}
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
 
-      # HACS reads the version from the manifest, so a mismatch would ship a
-      # release that reports the wrong version. Fail loudly rather than
-      # rewriting the manifest behind your back.
-      - name: Check the manifest version matches the tag
+      - name: Check the version is sane and new
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          manifest=$(jq -r .version custom_components/hdcvt_matrix/manifest.json)
-          if [ "$tag" != "$manifest" ]; then
-            echo "::error::tag $tag does not match manifest version $manifest."
-            echo "Bump version in custom_components/hdcvt_matrix/manifest.json first."
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$VERSION' is not a semver version like 1.2.3"
             exit 1
           fi
-          echo "version $manifest"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag v$VERSION already exists"
+            exit 1
+          fi
+          current=$(jq -r .version custom_components/hdcvt_matrix/manifest.json)
+          echo "$current -> $VERSION"
 
-      # Zipped so HACS installs a single asset rather than walking the tree.
-      # The archive root is the integration directory itself.
+      - name: Bump the manifest
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          manifest=custom_components/hdcvt_matrix/manifest.json
+          jq --arg v "$VERSION" '.version = $v' "$manifest" > "$manifest.tmp"
+          mv "$manifest.tmp" "$manifest"
+          git diff --stat
+
+      - name: Commit and push the bump
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release $VERSION"
+          git push
+
+      # Archive root is the integration directory's contents, which is what
+      # HACS unpacks into custom_components/hdcvt_matrix.
       - name: Build the release asset
         run: |
           cd custom_components/hdcvt_matrix
           zip -r "${GITHUB_WORKSPACE}/hdcvt_matrix.zip" . -x '*__pycache__*'
 
-      - name: Attach it to the release
+      - name: Tag and publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${GITHUB_REF_NAME}" hdcvt_matrix.zip --clobber
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            --target main \
+            --title "v$VERSION" \
+            --generate-notes \
+            hdcvt_matrix.zip

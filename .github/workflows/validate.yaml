@@ -7,6 +7,8 @@ on:
   schedule:
     - cron: "0 4 * * 1"
   workflow_dispatch:
+  # So a release can gate on the same checks instead of duplicating them.
+  workflow_call:
 
 # Least privilege by default; no job here needs to write anything.
 permissions: {}
