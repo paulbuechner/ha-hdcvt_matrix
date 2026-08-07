@@ -37,4 +37,5 @@ PLATFORMS: Final[list[Platform]] = [
     Platform.BUTTON,
     Platform.SELECT,
     Platform.SWITCH,
+    Platform.TEXT,
 ]

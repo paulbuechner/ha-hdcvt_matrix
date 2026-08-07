@@ -66,6 +66,14 @@ CMD_GET_EXT_AUDIO: Final = "get ext-audio status"
 CMD_EXT_AUDIO_SWITCH: Final = "ext-audio switch"
 CMD_SET_EXT_AUDIO_OUT: Final = "set ext-audio out"
 CMD_SET_EXT_AUDIO_MODE: Final = "set ext-audio mode"
+CMD_PRESET_CLEAR: Final = "preset clear"
+CMD_PRESET_NAME: Final = "preset name"
+CMD_SET_INPUT_NAME: Final = "set input name"
+CMD_SET_OUTPUT_NAME: Final = "set output name"
+
+# The web UI caps port names at 32 characters and preset names at 49 bytes.
+MAX_PORT_NAME: Final = 32
+MAX_PRESET_NAME: Final = 49
 
 # CEC targets. "port" is a mask over all ports, not a port number, and it is
 # passed per command: it does not disturb the selection stored by
@@ -77,6 +85,9 @@ CEC_OBJECT_OUTPUT: Final = 1
 # actions (1 = on, 2 = off), so do not reuse these for CEC_OBJECT_INPUT.
 CEC_OUTPUT_POWER_ON: Final = 0
 CEC_OUTPUT_POWER_OFF: Final = 1
+CEC_OUTPUT_MUTE: Final = 2
+CEC_OUTPUT_VOLUME_DOWN: Final = 3
+CEC_OUTPUT_VOLUME_UP: Final = 4
 
 # Firmware value -> option key. Labels live in the translation files.
 HDCP_MODES: Final[dict[int, str]] = {
@@ -547,6 +558,34 @@ class HdcvtMatrixClient:
             {KEY_COMHEAD: CMD_SET_EXT_AUDIO_MODE, "mode": mode}
         )
         _raise_for_result(data, "setting the audio mode")
+
+    async def async_clear_preset(self, index: int) -> None:
+        """Empty the preset at one-based ``index``."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_PRESET_CLEAR, "index": index}
+        )
+        _raise_for_result(data, f"clearing preset {index}")
+
+    async def async_set_preset_name(self, index: int, name: str) -> None:
+        """Rename the preset at one-based ``index``."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_PRESET_NAME, "index": index, "name": name}
+        )
+        _raise_for_result(data, f"renaming preset {index}")
+
+    async def async_set_input_name(self, source: int, name: str) -> None:
+        """Rename a one-based input."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_INPUT_NAME, "name": name, "index": source}
+        )
+        _raise_for_result(data, f"renaming input {source}")
+
+    async def async_set_output_name(self, output: int, name: str) -> None:
+        """Rename a one-based output."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_OUTPUT_NAME, "name": name, "index": output}
+        )
+        _raise_for_result(data, f"renaming output {output}")
 
     async def async_reboot(self) -> None:
         """Restart the matrix.

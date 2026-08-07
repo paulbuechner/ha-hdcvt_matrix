@@ -88,6 +88,18 @@
       },
       "reboot": {
         "name": "Neu starten"
+      },
+      "clear_preset": {
+        "name": "{name} leeren"
+      },
+      "display_volume_up": {
+        "name": "{name} Anzeige lauter"
+      },
+      "display_volume_down": {
+        "name": "{name} Anzeige leiser"
+      },
+      "display_mute": {
+        "name": "{name} Anzeige stumm"
       }
     },
     "switch": {
@@ -151,6 +163,17 @@
       },
       "ext_audio_output": {
         "name": "{name} Audioquelle"
+      }
+    },
+    "text": {
+      "input_name": {
+        "name": "Name Eingang {index}"
+      },
+      "output_name": {
+        "name": "Name Ausgang {index}"
+      },
+      "preset_name": {
+        "name": "Name Preset {index}"
       }
     }
   },

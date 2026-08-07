@@ -8,7 +8,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
-from .api import CEC_OUTPUT_POWER_OFF, CEC_OUTPUT_POWER_ON
+from .api import (
+    CEC_OUTPUT_MUTE,
+    CEC_OUTPUT_POWER_OFF,
+    CEC_OUTPUT_POWER_ON,
+    CEC_OUTPUT_VOLUME_DOWN,
+    CEC_OUTPUT_VOLUME_UP,
+)
 from .coordinator import HdcvtMatrixCoordinator
 from .entity import HdcvtMatrixEntity
 
@@ -25,13 +31,18 @@ async def async_setup_entry(  # NOSONAR
     """Set up reboot, preset save buttons and CEC display power per output."""
     coordinator = entry.runtime_data
     entities: list[ButtonEntity] = [HdcvtMatrixReboot(coordinator)]
-    entities.extend(
-        HdcvtMatrixSavePreset(coordinator, index)
-        for index in range(1, len(coordinator.data.preset_names) + 1)
-    )
+    for index in range(1, len(coordinator.data.preset_names) + 1):
+        entities.append(HdcvtMatrixSavePreset(coordinator, index))
+        entities.append(HdcvtMatrixClearPreset(coordinator, index))
     for output in range(1, coordinator.data.output_count + 1):
         entities.append(HdcvtMatrixDisplayPower(coordinator, output, on=True))
         entities.append(HdcvtMatrixDisplayPower(coordinator, output, on=False))
+        for key, command in (
+            ("volume_up", CEC_OUTPUT_VOLUME_UP),
+            ("volume_down", CEC_OUTPUT_VOLUME_DOWN),
+            ("mute", CEC_OUTPUT_MUTE),
+        ):
+            entities.append(HdcvtMatrixDisplayCec(coordinator, output, key, command))
     async_add_entities(entities)
 
 
@@ -118,3 +129,61 @@ class HdcvtMatrixReboot(HdcvtMatrixEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Restart the matrix."""
         await self.coordinator.async_reboot()
+
+
+class HdcvtMatrixClearPreset(HdcvtMatrixEntity, ButtonEntity):
+    """Empty one preset slot."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+    _attr_translation_key = "clear_preset"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator, index: int) -> None:
+        """Initialise the clear button for a one-based preset slot."""
+        super().__init__(coordinator, f"clear_preset_{index}")
+        self._index = index
+        names = coordinator.data.preset_names
+        self._attr_translation_placeholders = {
+            "name": names[index - 1] if index <= len(names) else f"Preset {index}"
+        }
+
+    @property
+    def available(self) -> bool:
+        """Presets mean nothing while the matrix is in standby."""
+        return super().available and self.coordinator.data.power
+
+    async def async_press(self) -> None:
+        """Empty this preset."""
+        await self.coordinator.async_clear_preset(self._index)
+
+
+class HdcvtMatrixDisplayCec(HdcvtMatrixEntity, ButtonEntity):
+    """Send a non-power CEC command to one output's display."""
+
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: HdcvtMatrixCoordinator,
+        output: int,
+        key: str,
+        command: int,
+    ) -> None:
+        """Initialise a CEC button for a one-based output."""
+        super().__init__(coordinator, f"output_{output}_display_{key}")
+        self._output = output
+        self._command = command
+        self._attr_translation_key = f"display_{key}"
+        names = coordinator.data.output_names
+        self._attr_translation_placeholders = {
+            "name": names[output - 1] if output <= len(names) else f"Output {output}"
+        }
+
+    @property
+    def available(self) -> bool:
+        """Follows the matrix, deliberately not the sink sensor."""
+        return super().available and self.coordinator.data.power
+
+    async def async_press(self) -> None:
+        """Send the CEC command."""
+        await self.coordinator.async_send_output_cec(self._output, self._command)

@@ -88,6 +88,18 @@
       },
       "reboot": {
         "name": "Reboot"
+      },
+      "clear_preset": {
+        "name": "Clear {name}"
+      },
+      "display_volume_up": {
+        "name": "{name} display volume up"
+      },
+      "display_volume_down": {
+        "name": "{name} display volume down"
+      },
+      "display_mute": {
+        "name": "{name} display mute"
       }
     },
     "switch": {
@@ -151,6 +163,17 @@
       },
       "ext_audio_output": {
         "name": "{name} audio source"
+      }
+    },
+    "text": {
+      "input_name": {
+        "name": "Input {index} name"
+      },
+      "output_name": {
+        "name": "Output {index} name"
+      },
+      "preset_name": {
+        "name": "Preset {index} name"
       }
     }
   },

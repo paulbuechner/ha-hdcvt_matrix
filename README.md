@@ -27,6 +27,11 @@ Local control for HDCVT web-controlled HDMI matrices (tested on **HDP-MXC88A**, 
 | Front panel lock | `switch` | Locks the physical buttons |
 | Beeper | `switch` | Front panel beep |
 | Reboot | `button` | Restarts the matrix |
+| Clear *preset* | `button` | Empties a preset slot |
+| *output* display volume up / down / mute | `button` | Over CEC |
+| *input* / *output* / *preset* name | `text` | Renames it on the device |
+
+Renaming a port renames its Home Assistant entities too, since every per-port entity takes its name from the device. Ports allow 32 characters, presets 49.
 
 The de-embedded audio outputs are a second matrix with their own mode. In the two bind modes the audio follows a video port and routing sent to it is ignored, so those selects report unavailable outside **audio matrix** mode rather than silently doing nothing.
 
@@ -78,8 +83,10 @@ curl -s -X POST http://<matrix>/cgi-bin/instr \
 | `set poweronoff` | `power: 0\|1` | |
 | `preset set` | `index` | one-based, recalls a stored preset |
 | `preset save` | `index` | stores the current routing |
-| `preset clear` | `index` | not yet used |
-| `preset name` | `index`, `name` | not yet used |
+| `preset clear` | `index` | |
+| `preset name` | `index`, `name` | note the key order differs from the two below |
+| `set input name` | `name`, `index` | |
+| `set output name` | `name`, `index` | |
 | `tx stream` | `out: [output, 0\|1]` | enable the output |
 | `set output audio mute` | `mute: [output, 0\|1]` | |
 | `tx hdcp` | `hdcp: [output, mode]` | 1=1.4, 2=2.2, 3=follow sink, 4=follow source, 5=off |

@@ -259,6 +259,35 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             self.client.async_set_ext_audio_mode(mode), "set the audio mode", apply
         )
 
+    async def async_clear_preset(self, index: int) -> None:
+        """Empty a preset slot."""
+        await self._async_write(
+            self.client.async_clear_preset(index), f"clear preset {index}", None
+        )
+
+    async def async_rename(self, kind: str, index: int, name: str) -> None:
+        """Rename an input, an output or a preset.
+
+        Port names feed entity names, so a rename here shows up in Home
+        Assistant on the next refresh.
+        """
+        call = {
+            "input": self.client.async_set_input_name,
+            "output": self.client.async_set_output_name,
+            "preset": self.client.async_set_preset_name,
+        }[kind]
+
+        def apply() -> None:
+            names = {
+                "input": self.data.input_names,
+                "output": self.data.output_names,
+                "preset": self.data.preset_names,
+            }[kind]
+            if index <= len(names):
+                names[index - 1] = name
+
+        await self._async_write(call(index, name), f"rename {kind} {index}", apply)
+
     async def async_reboot(self) -> None:
         """Restart the matrix."""
         await self._async_write(self.client.async_reboot(), "reboot the matrix", None)
