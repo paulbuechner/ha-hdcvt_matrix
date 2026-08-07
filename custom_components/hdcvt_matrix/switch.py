@@ -34,6 +34,7 @@ async def async_setup_entry(  # NOSONAR
     for output in range(1, coordinator.data.output_count + 1):
         entities.append(HdcvtMatrixOutputSwitch(coordinator, output))
         entities.append(HdcvtMatrixMuteSwitch(coordinator, output))
+        entities.append(HdcvtMatrixArcSwitch(coordinator, output))
     async_add_entities(entities)
 
 
@@ -181,3 +182,29 @@ class HdcvtMatrixPowerSwitch(HdcvtMatrixEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Put the matrix into standby."""
         await self.coordinator.async_set_power(on=False)
+
+
+class HdcvtMatrixArcSwitch(_OutputSwitch):
+    """Audio Return Channel on one output."""
+
+    _attr_translation_key = "output_arc"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator, output: int) -> None:
+        """Initialise the ARC switch."""
+        super().__init__(coordinator, output, "arc")
+
+    @property
+    def is_on(self) -> bool | None:
+        """True when ARC is enabled on this output."""
+        arc = self.coordinator.data.arc_enabled
+        if self._output > len(arc):
+            return None
+        return arc[self._output - 1]
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable ARC."""
+        await self.coordinator.async_set_arc(self._output, enabled=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable ARC."""
+        await self.coordinator.async_set_arc(self._output, enabled=False)

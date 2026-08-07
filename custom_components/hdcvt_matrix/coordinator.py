@@ -160,6 +160,32 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             apply,
         )
 
+    async def async_set_arc(self, output: int, *, enabled: bool) -> None:
+        """Enable or disable ARC on a one-based output."""
+
+        def apply() -> None:
+            if output <= len(self.data.arc_enabled):
+                self.data.arc_enabled[output - 1] = enabled
+
+        await self._async_write(
+            self.client.async_set_arc(output, enabled=enabled),
+            f"set ARC on output {output}",
+            apply,
+        )
+
+    async def async_set_edid(self, source: int, profile: int) -> None:
+        """Set the EDID profile on a one-based input."""
+
+        def apply() -> None:
+            if source <= len(self.data.input_edids):
+                self.data.input_edids[source - 1] = profile
+
+        await self._async_write(
+            self.client.async_set_edid(source, profile),
+            f"set the EDID on input {source}",
+            apply,
+        )
+
     async def async_set_panel_locked(self, *, locked: bool) -> None:
         """Lock or unlock the front panel."""
 

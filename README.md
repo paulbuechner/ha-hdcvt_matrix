@@ -16,6 +16,8 @@ Local control for HDCVT web-controlled HDMI matrices (tested on **HDP-MXC88A**, 
 | *output* scaler | `select` | Bypass / 4K to 1080p / auto |
 | *output* stream | `switch` | Enable or disable the HDMI output |
 | *output* audio mute | `switch` | Mute the output's audio |
+| *output* ARC | `switch` | Audio return channel |
+| *input* EDID | `select` | One of 47 firmware profiles, plus user slots and copy-from-output |
 | *input* signal | `binary_sensor` | A source is detected, diagnostic |
 | *output* display | `binary_sensor` | A sink is detected, diagnostic |
 | *output* display on / off | `button` | Powers the attached display over CEC |
@@ -72,7 +74,8 @@ curl -s -X POST http://<matrix>/cgi-bin/instr \
 | `set video scaler` | `scaler: [output, mode]` | 0=bypass, 1=4K→1080p, 3=auto. **Not** `video scaler`, which the web UI's own command map claims and the firmware rejects |
 | `set panel lock` | `lock: 0\|1` | scalar, not an array |
 | `set beep` | `beep: 0\|1` | scalar, not an array |
-| `set edid` | `edid: [input, id]` | not yet used; the id-to-name map still needs digging out |
+| `set edid` | `edid: [input, id]` | 1-36 fixed profiles, 37-39 user slots, 40-47 copy from an output |
+| `set arc` | `arc: [output, 0\|1]` | |
 | `cec command` | `object`, `port`, `index` | `object` 0=input 1=output; `port` is a **mask over all ports**, not a port number; outputs number power as 0=on 1=off, inputs as 1=on 2=off |
 | `set cec index` | `inputindex`, `outputindex` | persists the UI's port selection; not needed, since `cec command` carries its own mask |
 

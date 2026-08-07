@@ -258,3 +258,22 @@ async def test_beep_sends_a_scalar(
 
     calls = [r for r in session.requests if r["comhead"] == "set beep"]
     assert calls == [{"comhead": "set beep", "beep": 1}]
+
+
+async def test_arc_toggle(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """ARC is off in the fixture; enabling output 5 sends arc:[5, 1]."""
+    session = await setup_integration(make_session())
+
+    assert get_state(hass, output_switch_id(hass, 5, "arc")).state == STATE_OFF
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_ON,
+        {ATTR_ENTITY_ID: output_switch_id(hass, 5, "arc")},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "set arc"]
+    assert calls == [{"comhead": "set arc", "arc": [5, 1]}]

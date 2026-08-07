@@ -9,7 +9,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
-from .api import HDCP_MODES, SCALER_MODES
+from .api import EDID_PROFILES, HDCP_MODES, SCALER_MODES
 from .coordinator import HdcvtMatrixCoordinator
 from .entity import HdcvtMatrixEntity
 
@@ -32,6 +32,10 @@ async def async_setup_entry(  # NOSONAR
         entities.append(HdcvtMatrixOutputSelect(coordinator, output))
         entities.append(HdcvtMatrixHdcpSelect(coordinator, output))
         entities.append(HdcvtMatrixScalerSelect(coordinator, output))
+    entities.extend(
+        HdcvtMatrixEdidSelect(coordinator, source)
+        for source in range(1, coordinator.data.input_count + 1)
+    )
     async_add_entities(entities)
 
 
@@ -223,3 +227,46 @@ class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, SelectEntity):
 
         await self.coordinator.async_apply_preset(index)
         self.async_write_ha_state()
+
+
+class HdcvtMatrixEdidSelect(HdcvtMatrixEntity, SelectEntity):
+    """EDID profile advertised to the source on one input.
+
+    Options are the firmware's own labels rather than translation keys: they
+    are technical identifiers like "4K60(444),2.0CH" that read the same in
+    every language.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "input_edid"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator, source: int) -> None:
+        """Initialise the EDID select for a one-based input."""
+        super().__init__(coordinator, f"input_{source}_edid")
+        self._source = source
+        names = coordinator.data.input_names
+        self._attr_translation_placeholders = {
+            "name": names[source - 1] if source <= len(names) else f"Input {source}"
+        }
+        self._attr_options = list(EDID_PROFILES.values())
+
+    @property
+    def available(self) -> bool:
+        """EDID means nothing while the matrix is in standby."""
+        return super().available and self.coordinator.data.power
+
+    @property
+    def current_option(self) -> str | None:
+        """Map the firmware id to a label, or None if unrecognised."""
+        edids = self.coordinator.data.input_edids
+        if self._source > len(edids):
+            return None
+        return EDID_PROFILES.get(edids[self._source - 1])
+
+    async def async_select_option(self, option: str) -> None:
+        """Apply the chosen EDID profile."""
+        for profile, label in EDID_PROFILES.items():
+            if label == option:
+                await self.coordinator.async_set_edid(self._source, profile)
+                return
+        raise ServiceValidationError(f"{option!r} is not a known EDID profile")

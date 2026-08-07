@@ -303,3 +303,52 @@ async def test_unknown_firmware_mode_reads_as_none(
     )
 
     assert get_state(hass, mode_id(hass, 1, "hdcp")).state == STATE_UNKNOWN
+
+
+def edid_id(hass: HomeAssistant, source: int) -> str:
+    """Resolve the EDID select for a one-based input."""
+    resolved = er.async_get(hass).async_get_entity_id(
+        "select", DOMAIN, f"{MAC}_input_{source}_edid"
+    )
+    assert resolved is not None
+    return resolved
+
+
+async def test_edid_decodes_the_firmware_id(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The fixture reports 28 on input 1 and 10 on input 7."""
+    await setup_integration(make_session())
+
+    assert get_state(hass, edid_id(hass, 1)).state == "4K120(444)_HDR,2.0CH"
+    assert get_state(hass, edid_id(hass, 7)).state == "4K60(444),2.0CH"
+
+
+async def test_edid_selection_sends_the_profile_id(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Picking a label sends its firmware id, one-based input first."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: edid_id(hass, 2), ATTR_OPTION: "1080P,5.1CH"},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "set edid"]
+    assert calls == [{"comhead": "set edid", "edid": [2, 2]}]
+
+
+async def test_edid_offers_every_profile(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """All 47 firmware profiles, including the user and copy slots."""
+    await setup_integration(make_session())
+
+    options = get_state(hass, edid_id(hass, 1)).attributes["options"]
+    assert len(options) == 47
+    assert options[0] == "1080P,2.0CH"
+    assert "User1_EDID" in options
+    assert "COPY_FROM_OUTPUT_8" in options

@@ -90,6 +90,9 @@
       },
       "output_mute": {
         "name": "{name} audio mute"
+      },
+      "output_arc": {
+        "name": "{name} ARC"
       }
     },
     "select": {
@@ -116,6 +119,9 @@
           "downscale_4k_to_1080p": "4K to 1080p",
           "auto": "Auto"
         }
+      },
+      "input_edid": {
+        "name": "{name} EDID"
       }
     }
   },

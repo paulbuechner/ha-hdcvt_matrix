@@ -54,6 +54,8 @@ CMD_SET_SCALER: Final = "set video scaler"
 CMD_SET_PANEL_LOCK: Final = "set panel lock"
 CMD_SET_BEEP: Final = "set beep"
 CMD_CEC_COMMAND: Final = "cec command"
+CMD_SET_ARC: Final = "set arc"
+CMD_SET_EDID: Final = "set edid"
 
 # CEC targets. "port" is a mask over all ports, not a port number, and it is
 # passed per command: it does not disturb the selection stored by
@@ -74,6 +76,58 @@ HDCP_MODES: Final[dict[int, str]] = {
     4: "follow_source",
     5: "off",
 }
+# EDID profiles the firmware accepts, lifted from the web UI. Ids 37-39 are
+# the user-uploaded slots and 40+ copy the EDID from an output.
+EDID_PROFILES: Final[dict[int, str]] = {
+    1: "1080P,2.0CH",
+    2: "1080P,5.1CH",
+    3: "1080P,7.1CH",
+    4: "4K30,2.0CH",
+    5: "4K30,5.1CH",
+    6: "4K30,7.1CH",
+    7: "4K60(420),2.0CH",
+    8: "4K60(420),5.1CH",
+    9: "4K60(420),7.1CH",
+    10: "4K60(444),2.0CH",
+    11: "4K60(444),5.1CH",
+    12: "4K60(444),7.1CH",
+    13: "1080P_HDR,2.0CH",
+    14: "1080P_HDR,5.1CH",
+    15: "1080P_HDR,7.1CH",
+    16: "4K30_HDR,2.0CH",
+    17: "4K30_HDR,5.1CH",
+    18: "4K30_HDR,7.1CH",
+    19: "4K60(420)_HDR,2.0CH",
+    20: "4K60(420)_HDR,5.1CH",
+    21: "4K60(420)_HDR,7.1CH",
+    22: "4K60(444)_HDR,2.0CH",
+    23: "4K60(444)_HDR,5.1CH",
+    24: "4K60(444)_HDR,7.1CH",
+    25: "4K120(420)_HDR,2.0CH",
+    26: "4K120(420)_HDR,5.1CH",
+    27: "4K120(420)_HDR,7.1CH",
+    28: "4K120(444)_HDR,2.0CH",
+    29: "4K120(444)_HDR,5.1CH",
+    30: "4K120(444)_HDR,7.1CH",
+    31: "FRL10G_8K_HDR,2.0CH",
+    32: "FRL10G_8K_HDR,5.1CH",
+    33: "FRL10G_8K_HDR,7.1CH",
+    34: "FRL12G_8K_HDR,2.0CH",
+    35: "FRL12G_8K_HDR,5.1CH",
+    36: "FRL12G_8K_HDR,7.1CH",
+    37: "User1_EDID",
+    38: "User2_EDID",
+    39: "User3_EDID",
+    40: "COPY_FROM_OUTPUT_1",
+    41: "COPY_FROM_OUTPUT_2",
+    42: "COPY_FROM_OUTPUT_3",
+    43: "COPY_FROM_OUTPUT_4",
+    44: "COPY_FROM_OUTPUT_5",
+    45: "COPY_FROM_OUTPUT_6",
+    46: "COPY_FROM_OUTPUT_7",
+    47: "COPY_FROM_OUTPUT_8",
+}
+
 # Note the gap: the firmware has no scaler mode 2.
 SCALER_MODES: Final[dict[int, str]] = {
     0: "bypass",
@@ -166,6 +220,9 @@ class MatrixState:
     # Raw per-output mode values; see HDCP_MODES and SCALER_MODES.
     hdcp_modes: list[int] = field(default_factory=list)
     scaler_modes: list[int] = field(default_factory=list)
+    # ARC on the output, and the EDID profile id on each input.
+    arc_enabled: list[bool] = field(default_factory=list)
+    input_edids: list[int] = field(default_factory=list)
     # Front panel state.
     panel_locked: bool = False
     beep_enabled: bool = False
@@ -328,6 +385,8 @@ class HdcvtMatrixClient:
             output_enabled=_bool_list(outputs.get("allout"), outs),
             audio_muted=_bool_list(outputs.get("allaudiomute"), outs),
             hdcp_modes=_int_list(outputs.get("allhdcp"))[:outs],
+            arc_enabled=_bool_list(outputs.get("allarc"), outs),
+            input_edids=_int_list(inputs.get("edid"))[:ins],
             scaler_modes=_int_list(outputs.get("allscaler"))[:outs],
             panel_locked=bool(system.get("lock", 0)),
             beep_enabled=bool(system.get("beep", 0)),
@@ -403,6 +462,20 @@ class HdcvtMatrixClient:
             {KEY_COMHEAD: CMD_SET_SCALER, "scaler": [output, mode]}
         )
         _raise_for_result(data, f"setting scaler mode on output {output}")
+
+    async def async_set_arc(self, output: int, *, enabled: bool) -> None:
+        """Enable or disable ARC on a one-based output."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_ARC, "arc": [output, int(enabled)]}
+        )
+        _raise_for_result(data, f"setting ARC on output {output}")
+
+    async def async_set_edid(self, source: int, profile: int) -> None:
+        """Set the EDID profile on a one-based input. See EDID_PROFILES."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_EDID, "edid": [source, profile]}
+        )
+        _raise_for_result(data, f"setting EDID on input {source}")
 
     async def async_set_panel_locked(self, *, locked: bool) -> None:
         """Lock or unlock the front panel buttons."""
