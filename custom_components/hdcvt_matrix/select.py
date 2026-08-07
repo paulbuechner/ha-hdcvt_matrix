@@ -19,7 +19,7 @@ from .api import (
     SCALER_MODES,
 )
 from .coordinator import HdcvtMatrixCoordinator
-from .entity import HdcvtMatrixEntity
+from .entity import HdcvtMatrixEntity, HdcvtMatrixPortEntity
 
 # All writes go through the coordinator, which serialises them.
 PARALLEL_UPDATES = 0
@@ -54,7 +54,7 @@ async def async_setup_entry(  # NOSONAR
     async_add_entities(entities)
 
 
-class _OutputModeSelect(HdcvtMatrixEntity, SelectEntity):
+class _OutputModeSelect(HdcvtMatrixPortEntity, SelectEntity):
     """A select backed by one firmware value per output.
 
     Firmware values are not contiguous (the scaler has no mode 2), so options
@@ -69,12 +69,7 @@ class _OutputModeSelect(HdcvtMatrixEntity, SelectEntity):
         self, coordinator: HdcvtMatrixCoordinator, output: int, key: str
     ) -> None:
         """Initialise the select for a one-based output."""
-        super().__init__(coordinator, f"output_{output}_{key}")
-        self._output = output
-        names = coordinator.data.output_names
-        self._attr_translation_placeholders = {
-            "name": names[output - 1] if output <= len(names) else f"Output {output}"
-        }
+        super().__init__(coordinator, f"output_{output}_{key}", "output", output)
         self._attr_options = list(self._modes.values())
 
     def _values(self) -> list[int]:
@@ -82,17 +77,10 @@ class _OutputModeSelect(HdcvtMatrixEntity, SelectEntity):
         raise NotImplementedError
 
     @property
-    def available(self) -> bool:
-        """Output settings mean nothing while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
-
-    @property
     def current_option(self) -> str | None:
         """Map the firmware value to an option, or None if unrecognised."""
-        values = self._values()
-        if self._output > len(values):
-            return None
-        return self._modes.get(values[self._output - 1])
+        value = self._value(self._values())
+        return None if value is None else self._modes.get(value)
 
     def _mode_for(self, option: str) -> int:
         """Map an option back to its firmware value."""
@@ -117,7 +105,7 @@ class HdcvtMatrixHdcpSelect(_OutputModeSelect):
 
     async def async_select_option(self, option: str) -> None:
         """Apply the chosen HDCP mode."""
-        await self.coordinator.async_set_hdcp_mode(self._output, self._mode_for(option))
+        await self.coordinator.async_set_hdcp_mode(self._port, self._mode_for(option))
 
 
 class HdcvtMatrixScalerSelect(_OutputModeSelect):
@@ -135,38 +123,17 @@ class HdcvtMatrixScalerSelect(_OutputModeSelect):
 
     async def async_select_option(self, option: str) -> None:
         """Apply the chosen scaler mode."""
-        await self.coordinator.async_set_scaler_mode(
-            self._output, self._mode_for(option)
-        )
+        await self.coordinator.async_set_scaler_mode(self._port, self._mode_for(option))
 
 
-class HdcvtMatrixOutputSelect(HdcvtMatrixEntity, SelectEntity):
+class HdcvtMatrixOutputSelect(HdcvtMatrixPortEntity, SelectEntity):
     """Choose which input feeds one output."""
 
     _attr_translation_key = "output"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, output: int) -> None:
         """Initialise the select for a one-based output."""
-        super().__init__(coordinator, f"output_{output}")
-        self._output = output
-        self._attr_translation_placeholders = {
-            "name": self._output_name(coordinator.data.output_names)
-        }
-
-    def _output_name(self, names: list[str]) -> str:
-        """Return the device's name for this output, or its number."""
-        if 1 <= self._output <= len(names) and names[self._output - 1]:
-            return names[self._output - 1]
-        return f"Output {self._output}"
-
-    @property
-    def available(self) -> bool:
-        """Routing means nothing while the matrix is in standby."""
-        return (
-            super().available
-            and self.coordinator.data.power
-            and self._output <= self.coordinator.data.output_count
-        )
+        super().__init__(coordinator, f"output_{output}", "output", output)
 
     @property
     def options(self) -> list[str]:
@@ -176,12 +143,9 @@ class HdcvtMatrixOutputSelect(HdcvtMatrixEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """The input currently feeding this output."""
-        routes = self.coordinator.data.routes
+        source = self._value(self.coordinator.data.routes)
         names = self.coordinator.data.input_names
-        if self._output > len(routes):
-            return None
-        source = routes[self._output - 1]
-        if not 1 <= source <= len(names):
+        if source is None or not 1 <= source <= len(names):
             return None
         return names[source - 1]
 
@@ -195,7 +159,7 @@ class HdcvtMatrixOutputSelect(HdcvtMatrixEntity, SelectEntity):
                 f"{option!r} is not an input on this matrix"
             ) from err
 
-        await self.coordinator.async_set_route(self._output, source)
+        await self.coordinator.async_set_route(self._port, source)
 
 
 class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, SelectEntity):
@@ -206,11 +170,6 @@ class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, SelectEntity):
     def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
         """Initialise the preset select."""
         super().__init__(coordinator, "preset")
-
-    @property
-    def available(self) -> bool:
-        """Presets mean nothing while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
 
     @property
     def options(self) -> list[str]:
@@ -245,7 +204,7 @@ class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, SelectEntity):
         self.async_write_ha_state()
 
 
-class HdcvtMatrixEdidSelect(HdcvtMatrixEntity, SelectEntity):
+class HdcvtMatrixEdidSelect(HdcvtMatrixPortEntity, SelectEntity):
     """EDID profile advertised to the source on one input.
 
     Options are the firmware's own labels rather than translation keys: they
@@ -259,32 +218,20 @@ class HdcvtMatrixEdidSelect(HdcvtMatrixEntity, SelectEntity):
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, source: int) -> None:
         """Initialise the EDID select for a one-based input."""
-        super().__init__(coordinator, f"input_{source}_edid")
-        self._source = source
-        names = coordinator.data.input_names
-        self._attr_translation_placeholders = {
-            "name": names[source - 1] if source <= len(names) else f"Input {source}"
-        }
+        super().__init__(coordinator, f"input_{source}_edid", "input", source)
         self._attr_options = list(EDID_PROFILES.values())
-
-    @property
-    def available(self) -> bool:
-        """EDID means nothing while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
 
     @property
     def current_option(self) -> str | None:
         """Map the firmware id to a label, or None if unrecognised."""
-        edids = self.coordinator.data.input_edids
-        if self._source > len(edids):
-            return None
-        return EDID_PROFILES.get(edids[self._source - 1])
+        edid = self._value(self.coordinator.data.input_edids)
+        return None if edid is None else EDID_PROFILES.get(edid)
 
     async def async_select_option(self, option: str) -> None:
         """Apply the chosen EDID profile."""
         for profile, label in EDID_PROFILES.items():
             if label == option:
-                await self.coordinator.async_set_edid(self._source, profile)
+                await self.coordinator.async_set_edid(self._port, profile)
                 return
         raise ServiceValidationError(f"{option!r} is not a known EDID profile")
 
@@ -302,11 +249,6 @@ class HdcvtMatrixExtAudioModeSelect(HdcvtMatrixEntity, SelectEntity):
         self._attr_options = list(EXT_AUDIO_MODES.values())
 
     @property
-    def available(self) -> bool:
-        """Audio settings mean nothing while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
-
-    @property
     def current_option(self) -> str | None:
         """Map the firmware mode to an option."""
         return EXT_AUDIO_MODES.get(self.coordinator.data.ext_audio_mode)
@@ -320,7 +262,7 @@ class HdcvtMatrixExtAudioModeSelect(HdcvtMatrixEntity, SelectEntity):
         raise ServiceValidationError(f"{option!r} is not a valid audio mode")
 
 
-class HdcvtMatrixExtAudioSelect(HdcvtMatrixEntity, SelectEntity):
+class HdcvtMatrixExtAudioSelect(HdcvtMatrixPortEntity, SelectEntity):
     """Which input feeds one de-embedded audio output.
 
     Only meaningful in matrix mode: in the two bind modes the audio follows a
@@ -333,19 +275,13 @@ class HdcvtMatrixExtAudioSelect(HdcvtMatrixEntity, SelectEntity):
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, output: int) -> None:
         """Initialise the audio routing select for a one-based output."""
-        super().__init__(coordinator, f"ext_audio_{output}")
-        self._output = output
-        names = coordinator.data.ext_audio_output_names
-        self._attr_translation_placeholders = {
-            "name": names[output - 1] if output <= len(names) else f"Audio {output}"
-        }
+        super().__init__(coordinator, f"ext_audio_{output}", "ext_audio", output)
 
     @property
     def available(self) -> bool:
         """Unavailable outside matrix mode, where routing does nothing."""
         return (
             super().available
-            and self.coordinator.data.power
             and self.coordinator.data.ext_audio_mode == EXT_AUDIO_MODE_MATRIX
         )
 
@@ -357,12 +293,9 @@ class HdcvtMatrixExtAudioSelect(HdcvtMatrixEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """The input currently feeding this audio output."""
-        routes = self.coordinator.data.ext_audio_routes
+        source = self._value(self.coordinator.data.ext_audio_routes)
         names = self.coordinator.data.input_names
-        if self._output > len(routes):
-            return None
-        source = routes[self._output - 1]
-        if not 1 <= source <= len(names):
+        if source is None or not 1 <= source <= len(names):
             return None
         return names[source - 1]
 
@@ -376,7 +309,7 @@ class HdcvtMatrixExtAudioSelect(HdcvtMatrixEntity, SelectEntity):
                 f"{option!r} is not an input on this matrix"
             ) from err
 
-        await self.coordinator.async_set_ext_audio_route(self._output, source)
+        await self.coordinator.async_set_ext_audio_route(self._port, source)
 
 
 class _SystemSelect(HdcvtMatrixEntity, SelectEntity):
@@ -394,11 +327,6 @@ class _SystemSelect(HdcvtMatrixEntity, SelectEntity):
     def _current(self) -> int:
         """Return the firmware value this select reads."""
         raise NotImplementedError
-
-    @property
-    def available(self) -> bool:
-        """System settings mean nothing while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
 
     @property
     def current_option(self) -> str | None:

@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
 from .coordinator import HdcvtMatrixCoordinator
-from .entity import HdcvtMatrixEntity
+from .entity import HdcvtMatrixEntity, HdcvtMatrixPortEntity
 
 # All writes go through the coordinator, which serialises them.
 PARALLEL_UPDATES = 0
@@ -92,7 +92,7 @@ class HdcvtMatrixBeepSwitch(HdcvtMatrixEntity, SwitchEntity):
         await self.coordinator.async_set_beep(enabled=False)
 
 
-class _OutputSwitch(HdcvtMatrixEntity, SwitchEntity):
+class _OutputSwitch(HdcvtMatrixPortEntity, SwitchEntity):
     """Shared plumbing for the per-output switches."""
 
     _attr_entity_registry_enabled_default = False
@@ -102,17 +102,7 @@ class _OutputSwitch(HdcvtMatrixEntity, SwitchEntity):
         self, coordinator: HdcvtMatrixCoordinator, output: int, key: str
     ) -> None:
         """Initialise the switch for a one-based output."""
-        super().__init__(coordinator, f"output_{output}_{key}")
-        self._output = output
-        names = coordinator.data.output_names
-        self._attr_translation_placeholders = {
-            "name": names[output - 1] if output <= len(names) else f"Output {output}"
-        }
-
-    @property
-    def available(self) -> bool:
-        """Output settings mean nothing while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
+        super().__init__(coordinator, f"output_{output}_{key}", "output", output)
 
 
 class HdcvtMatrixOutputSwitch(_OutputSwitch):
@@ -127,18 +117,15 @@ class HdcvtMatrixOutputSwitch(_OutputSwitch):
     @property
     def is_on(self) -> bool | None:
         """True when the output is streaming."""
-        enabled = self.coordinator.data.output_enabled
-        if self._output > len(enabled):
-            return None
-        return enabled[self._output - 1]
+        return self._value(self.coordinator.data.output_enabled)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Start the stream on this output."""
-        await self.coordinator.async_set_output_enabled(self._output, enabled=True)
+        await self.coordinator.async_set_output_enabled(self._port, enabled=True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Stop the stream on this output."""
-        await self.coordinator.async_set_output_enabled(self._output, enabled=False)
+        await self.coordinator.async_set_output_enabled(self._port, enabled=False)
 
 
 class HdcvtMatrixMuteSwitch(_OutputSwitch):
@@ -153,22 +140,22 @@ class HdcvtMatrixMuteSwitch(_OutputSwitch):
     @property
     def is_on(self) -> bool | None:
         """True when this output's audio is muted."""
-        muted = self.coordinator.data.audio_muted
-        if self._output > len(muted):
-            return None
-        return muted[self._output - 1]
+        return self._value(self.coordinator.data.audio_muted)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Mute this output."""
-        await self.coordinator.async_set_audio_muted(self._output, muted=True)
+        await self.coordinator.async_set_audio_muted(self._port, muted=True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Unmute this output."""
-        await self.coordinator.async_set_audio_muted(self._output, muted=False)
+        await self.coordinator.async_set_audio_muted(self._port, muted=False)
 
 
 class HdcvtMatrixPowerSwitch(HdcvtMatrixEntity, SwitchEntity):
     """Switch the matrix between on and standby."""
+
+    # The one control that has to work while the matrix is asleep.
+    _requires_power = False
 
     _attr_translation_key = "power"
     _attr_device_class = SwitchDeviceClass.SWITCH
@@ -203,21 +190,18 @@ class HdcvtMatrixArcSwitch(_OutputSwitch):
     @property
     def is_on(self) -> bool | None:
         """True when ARC is enabled on this output."""
-        arc = self.coordinator.data.arc_enabled
-        if self._output > len(arc):
-            return None
-        return arc[self._output - 1]
+        return self._value(self.coordinator.data.arc_enabled)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Enable ARC."""
-        await self.coordinator.async_set_arc(self._output, enabled=True)
+        await self.coordinator.async_set_arc(self._port, enabled=True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable ARC."""
-        await self.coordinator.async_set_arc(self._output, enabled=False)
+        await self.coordinator.async_set_arc(self._port, enabled=False)
 
 
-class HdcvtMatrixExtAudioSwitch(HdcvtMatrixEntity, SwitchEntity):
+class HdcvtMatrixExtAudioSwitch(HdcvtMatrixPortEntity, SwitchEntity):
     """Enable one de-embedded audio output."""
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -226,30 +210,17 @@ class HdcvtMatrixExtAudioSwitch(HdcvtMatrixEntity, SwitchEntity):
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, output: int) -> None:
         """Initialise the audio output switch for a one-based output."""
-        super().__init__(coordinator, f"ext_audio_{output}_out")
-        self._output = output
-        names = coordinator.data.ext_audio_output_names
-        self._attr_translation_placeholders = {
-            "name": names[output - 1] if output <= len(names) else f"Audio {output}"
-        }
-
-    @property
-    def available(self) -> bool:
-        """Audio settings mean nothing while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
+        super().__init__(coordinator, f"ext_audio_{output}_out", "ext_audio", output)
 
     @property
     def is_on(self) -> bool | None:
         """True when this audio output is enabled."""
-        enabled = self.coordinator.data.ext_audio_enabled
-        if self._output > len(enabled):
-            return None
-        return enabled[self._output - 1]
+        return self._value(self.coordinator.data.ext_audio_enabled)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Enable this audio output."""
-        await self.coordinator.async_set_ext_audio_enabled(self._output, enabled=True)
+        await self.coordinator.async_set_ext_audio_enabled(self._port, enabled=True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable this audio output."""
-        await self.coordinator.async_set_ext_audio_enabled(self._output, enabled=False)
+        await self.coordinator.async_set_ext_audio_enabled(self._port, enabled=False)

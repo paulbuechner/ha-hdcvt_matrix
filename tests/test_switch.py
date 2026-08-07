@@ -277,3 +277,22 @@ async def test_arc_toggle(
 
     calls = [r for r in session.requests if r["comhead"] == "set arc"]
     assert calls == [{"comhead": "set arc", "arc": [5, 1]}]
+
+
+async def test_ext_audio_uses_its_own_port_names(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The audio outputs are named separately from the video outputs.
+
+    Both lists are called alloutputname, in different replies, so reading the
+    wrong one is easy and invisible while they happen to match.
+    """
+    await setup_integration(make_session())
+
+    target = er.async_get(hass).async_get_entity_id(
+        "switch", DOMAIN, f"{MAC}_ext_audio_1_out"
+    )
+    assert target is not None
+    name = get_state(hass, target).attributes["friendly_name"]
+    assert "Audio1" in name
+    assert "Output1" not in name

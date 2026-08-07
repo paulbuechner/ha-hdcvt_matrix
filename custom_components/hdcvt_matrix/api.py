@@ -323,6 +323,21 @@ class MatrixState:
     baud_rate: int = 0
     lcd_on_time: int = 0
 
+    def names_for(self, kind: str) -> list[str]:
+        """Return the device's names for a port kind.
+
+        The three name lists are addressed the same way by entities and by
+        renaming, so the mapping lives here rather than in each caller.
+        """
+        return {
+            "input": self.input_names,
+            "output": self.output_names,
+            "preset": self.preset_names,
+            # The de-embedded audio outputs carry their own names, which the
+            # firmware reports separately from the video outputs.
+            "ext_audio": self.ext_audio_output_names,
+        }[kind]
+
     @property
     def input_count(self) -> int:
         """Number of physical inputs."""

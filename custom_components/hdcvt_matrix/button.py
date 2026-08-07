@@ -16,7 +16,7 @@ from .api import (
     CEC_OUTPUT_VOLUME_UP,
 )
 from .coordinator import HdcvtMatrixCoordinator
-from .entity import HdcvtMatrixEntity
+from .entity import HdcvtMatrixEntity, HdcvtMatrixPortEntity
 
 PARALLEL_UPDATES = 0
 
@@ -46,7 +46,7 @@ async def async_setup_entry(  # NOSONAR
     async_add_entities(entities)
 
 
-class HdcvtMatrixDisplayPower(HdcvtMatrixEntity, ButtonEntity):
+class HdcvtMatrixDisplayPower(HdcvtMatrixPortEntity, ButtonEntity):
     """Power a display on or off over CEC.
 
     A button rather than a switch because CEC here is one-way: the matrix can
@@ -61,30 +61,18 @@ class HdcvtMatrixDisplayPower(HdcvtMatrixEntity, ButtonEntity):
     ) -> None:
         """Initialise the CEC power button for a one-based output."""
         action = "on" if on else "off"
-        super().__init__(coordinator, f"output_{output}_display_{action}")
-        self._output = output
+        super().__init__(
+            coordinator, f"output_{output}_display_{action}", "output", output
+        )
         self._command = CEC_OUTPUT_POWER_ON if on else CEC_OUTPUT_POWER_OFF
         self._attr_translation_key = f"display_{action}"
-        names = coordinator.data.output_names
-        self._attr_translation_placeholders = {
-            "name": names[output - 1] if output <= len(names) else f"Output {output}"
-        }
-
-    @property
-    def available(self) -> bool:
-        """Follows the matrix, deliberately not the sink sensor.
-
-        A display in standby may drop hotplug detect, which would make the
-        button to wake it disappear exactly when it is wanted.
-        """
-        return super().available and self.coordinator.data.power
 
     async def async_press(self) -> None:
         """Send the CEC power command to this output's display."""
-        await self.coordinator.async_send_output_cec(self._output, self._command)
+        await self.coordinator.async_send_output_cec(self._port, self._command)
 
 
-class HdcvtMatrixSavePreset(HdcvtMatrixEntity, ButtonEntity):
+class HdcvtMatrixSavePreset(HdcvtMatrixPortEntity, ButtonEntity):
     """Overwrite one preset with the routing currently in effect."""
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -93,21 +81,11 @@ class HdcvtMatrixSavePreset(HdcvtMatrixEntity, ButtonEntity):
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, index: int) -> None:
         """Initialise the button for a one-based preset slot."""
-        super().__init__(coordinator, f"save_preset_{index}")
-        self._index = index
-        names = coordinator.data.preset_names
-        self._attr_translation_placeholders = {
-            "name": names[index - 1] if index <= len(names) else f"Preset {index}"
-        }
-
-    @property
-    def available(self) -> bool:
-        """Saving a preset is meaningless while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
+        super().__init__(coordinator, f"save_preset_{index}", "preset", index)
 
     async def async_press(self) -> None:
         """Store the current routing into this preset."""
-        await self.coordinator.async_save_preset(self._index)
+        await self.coordinator.async_save_preset(self._port)
 
 
 class HdcvtMatrixReboot(HdcvtMatrixEntity, ButtonEntity):
@@ -131,7 +109,7 @@ class HdcvtMatrixReboot(HdcvtMatrixEntity, ButtonEntity):
         await self.coordinator.async_reboot()
 
 
-class HdcvtMatrixClearPreset(HdcvtMatrixEntity, ButtonEntity):
+class HdcvtMatrixClearPreset(HdcvtMatrixPortEntity, ButtonEntity):
     """Empty one preset slot."""
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -140,24 +118,14 @@ class HdcvtMatrixClearPreset(HdcvtMatrixEntity, ButtonEntity):
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, index: int) -> None:
         """Initialise the clear button for a one-based preset slot."""
-        super().__init__(coordinator, f"clear_preset_{index}")
-        self._index = index
-        names = coordinator.data.preset_names
-        self._attr_translation_placeholders = {
-            "name": names[index - 1] if index <= len(names) else f"Preset {index}"
-        }
-
-    @property
-    def available(self) -> bool:
-        """Presets mean nothing while the matrix is in standby."""
-        return super().available and self.coordinator.data.power
+        super().__init__(coordinator, f"clear_preset_{index}", "preset", index)
 
     async def async_press(self) -> None:
         """Empty this preset."""
-        await self.coordinator.async_clear_preset(self._index)
+        await self.coordinator.async_clear_preset(self._port)
 
 
-class HdcvtMatrixDisplayCec(HdcvtMatrixEntity, ButtonEntity):
+class HdcvtMatrixDisplayCec(HdcvtMatrixPortEntity, ButtonEntity):
     """Send a non-power CEC command to one output's display."""
 
     _attr_entity_registry_enabled_default = False
@@ -170,20 +138,12 @@ class HdcvtMatrixDisplayCec(HdcvtMatrixEntity, ButtonEntity):
         command: int,
     ) -> None:
         """Initialise a CEC button for a one-based output."""
-        super().__init__(coordinator, f"output_{output}_display_{key}")
-        self._output = output
+        super().__init__(
+            coordinator, f"output_{output}_display_{key}", "output", output
+        )
         self._command = command
         self._attr_translation_key = f"display_{key}"
-        names = coordinator.data.output_names
-        self._attr_translation_placeholders = {
-            "name": names[output - 1] if output <= len(names) else f"Output {output}"
-        }
-
-    @property
-    def available(self) -> bool:
-        """Follows the matrix, deliberately not the sink sensor."""
-        return super().available and self.coordinator.data.power
 
     async def async_press(self) -> None:
         """Send the CEC command."""
-        await self.coordinator.async_send_output_cec(self._output, self._command)
+        await self.coordinator.async_send_output_cec(self._port, self._command)

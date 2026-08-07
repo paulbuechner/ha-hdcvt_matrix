@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
 from .coordinator import HdcvtMatrixCoordinator
-from .entity import HdcvtMatrixEntity
+from .entity import HdcvtMatrixPortEntity
 
 PARALLEL_UPDATES = 0
 
@@ -37,7 +37,7 @@ async def async_setup_entry(  # NOSONAR
     async_add_entities(entities)
 
 
-class HdcvtMatrixInputSignal(HdcvtMatrixEntity, BinarySensorEntity):
+class HdcvtMatrixInputSignal(HdcvtMatrixPortEntity, BinarySensorEntity):
     """Whether a source is detected on one input."""
 
     _attr_device_class = BinarySensorDeviceClass.PLUG
@@ -47,23 +47,15 @@ class HdcvtMatrixInputSignal(HdcvtMatrixEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, port: int) -> None:
         """Initialise the sensor for a one-based input."""
-        super().__init__(coordinator, f"input_{port}_signal")
-        self._port = port
-        names = coordinator.data.input_names
-        self._attr_translation_placeholders = {
-            "name": names[port - 1] if port <= len(names) else f"Input {port}"
-        }
+        super().__init__(coordinator, f"input_{port}_signal", "input", port)
 
     @property
     def is_on(self) -> bool | None:
         """True when the matrix reports a source on this input."""
-        active = self.coordinator.data.input_active
-        if self._port > len(active):
-            return None
-        return active[self._port - 1]
+        return self._value(self.coordinator.data.input_active)
 
 
-class HdcvtMatrixOutputSink(HdcvtMatrixEntity, BinarySensorEntity):
+class HdcvtMatrixOutputSink(HdcvtMatrixPortEntity, BinarySensorEntity):
     """Whether a display is detected on one output."""
 
     _attr_device_class = BinarySensorDeviceClass.PLUG
@@ -73,17 +65,9 @@ class HdcvtMatrixOutputSink(HdcvtMatrixEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, port: int) -> None:
         """Initialise the sensor for a one-based output."""
-        super().__init__(coordinator, f"output_{port}_sink")
-        self._port = port
-        names = coordinator.data.output_names
-        self._attr_translation_placeholders = {
-            "name": names[port - 1] if port <= len(names) else f"Output {port}"
-        }
+        super().__init__(coordinator, f"output_{port}_sink", "output", port)
 
     @property
     def is_on(self) -> bool | None:
         """True when the matrix reports a sink on this output."""
-        connected = self.coordinator.data.output_connected
-        if self._port > len(connected):
-            return None
-        return connected[self._port - 1]
+        return self._value(self.coordinator.data.output_connected)

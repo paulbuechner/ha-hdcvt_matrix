@@ -91,7 +91,10 @@ DEVICE_RESPONSES: dict[str, dict[str, Any]] = {
         "allsource": [1, 2, 3, 4, 5, 6, 7, 8],
         "allout": [0, 0, 0, 0, 0, 0, 0, 0],
         "allinputname": [f"Input{i}" for i in range(1, 9)],
-        "alloutputname": [f"Output{i}" for i in range(1, 9)],
+        # Deliberately different from the video output names: the firmware
+        # reports these separately, and reading the wrong list is an easy
+        # mistake that identical fixtures would hide.
+        "alloutputname": [f"Audio{i}" for i in range(1, 9)],
         "index": 1,
     },
     "get network": {
