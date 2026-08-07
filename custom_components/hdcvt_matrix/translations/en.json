@@ -163,6 +163,21 @@
       },
       "ext_audio_output": {
         "name": "{name} audio source"
+      },
+      "baud_rate": {
+        "name": "Serial baud rate"
+      },
+      "lcd_on_time": {
+        "name": "Panel backlight timeout",
+        "state": {
+          "always_on": "Always on",
+          "5_seconds": "5 seconds",
+          "10_seconds": "10 seconds",
+          "30_seconds": "30 seconds",
+          "1_minute": "1 minute",
+          "5_minutes": "5 minutes",
+          "10_minutes": "10 minutes"
+        }
       }
     },
     "text": {

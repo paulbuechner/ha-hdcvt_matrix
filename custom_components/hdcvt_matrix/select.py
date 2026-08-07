@@ -10,10 +10,12 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
 from .api import (
+    BAUD_RATES,
     EDID_PROFILES,
     EXT_AUDIO_MODE_MATRIX,
     EXT_AUDIO_MODES,
     HDCP_MODES,
+    LCD_ON_TIMES,
     SCALER_MODES,
 )
 from .coordinator import HdcvtMatrixCoordinator
@@ -43,6 +45,8 @@ async def async_setup_entry(  # NOSONAR
         for source in range(1, coordinator.data.input_count + 1)
     )
     entities.append(HdcvtMatrixExtAudioModeSelect(coordinator))
+    entities.append(HdcvtMatrixBaudRateSelect(coordinator))
+    entities.append(HdcvtMatrixLcdOnTimeSelect(coordinator))
     entities.extend(
         HdcvtMatrixExtAudioSelect(coordinator, output)
         for output in range(1, len(coordinator.data.ext_audio_output_names) + 1)
@@ -373,3 +377,73 @@ class HdcvtMatrixExtAudioSelect(HdcvtMatrixEntity, SelectEntity):
             ) from err
 
         await self.coordinator.async_set_ext_audio_route(self._output, source)
+
+
+class _SystemSelect(HdcvtMatrixEntity, SelectEntity):
+    """A select backed by one scalar in get system status."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+    _values: dict[int, str]
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator, key: str) -> None:
+        """Initialise the select."""
+        super().__init__(coordinator, key)
+        self._attr_options = list(self._values.values())
+
+    def _current(self) -> int:
+        """Return the firmware value this select reads."""
+        raise NotImplementedError
+
+    @property
+    def available(self) -> bool:
+        """System settings mean nothing while the matrix is in standby."""
+        return super().available and self.coordinator.data.power
+
+    @property
+    def current_option(self) -> str | None:
+        """Map the firmware value to an option, or None if unrecognised."""
+        return self._values.get(self._current())
+
+    def _value_for(self, option: str) -> int:
+        """Map an option back to its firmware value."""
+        for value, name in self._values.items():
+            if name == option:
+                return value
+        raise ServiceValidationError(f"{option!r} is not a valid setting")
+
+
+class HdcvtMatrixBaudRateSelect(_SystemSelect):
+    """RS-232 rate on the serial control port."""
+
+    _attr_translation_key = "baud_rate"
+    _values = BAUD_RATES
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the baud rate select."""
+        super().__init__(coordinator, "baud_rate")
+
+    def _current(self) -> int:
+        return self.coordinator.data.baud_rate
+
+    async def async_select_option(self, option: str) -> None:
+        """Apply the chosen baud rate."""
+        await self.coordinator.async_set_baud_rate(self._value_for(option))
+
+
+class HdcvtMatrixLcdOnTimeSelect(_SystemSelect):
+    """How long the front panel backlight stays on."""
+
+    _attr_translation_key = "lcd_on_time"
+    _values = LCD_ON_TIMES
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the LCD timeout select."""
+        super().__init__(coordinator, "lcd_on_time")
+
+    def _current(self) -> int:
+        return self.coordinator.data.lcd_on_time
+
+    async def async_select_option(self, option: str) -> None:
+        """Apply the chosen timeout."""
+        await self.coordinator.async_set_lcd_on_time(self._value_for(option))

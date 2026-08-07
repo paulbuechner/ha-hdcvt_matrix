@@ -300,6 +300,26 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
 
         await self._async_write(call(index, name), f"rename {kind} {index}", apply)
 
+    async def async_set_baud_rate(self, rate: int) -> None:
+        """Set the RS-232 rate on the serial control port."""
+
+        def apply() -> None:
+            self.data.baud_rate = rate
+
+        await self._async_write(
+            self.client.async_set_baud_rate(rate), "set the baud rate", apply
+        )
+
+    async def async_set_lcd_on_time(self, value: int) -> None:
+        """Set the front panel backlight timeout."""
+
+        def apply() -> None:
+            self.data.lcd_on_time = value
+
+        await self._async_write(
+            self.client.async_set_lcd_on_time(value), "set the LCD timeout", apply
+        )
+
     async def async_reboot(self) -> None:
         """Restart the matrix."""
         await self._async_write(self.client.async_reboot(), "reboot the matrix", None)

@@ -51,6 +51,8 @@ Ten entities appear straight away: power, one routing select per output, and pre
 | *output* audio out | `switch` | Enables a de-embedded audio output |
 | Front panel lock | `switch` | Locks the physical buttons |
 | Beeper | `switch` | Front panel beep |
+| Serial baud rate | `select` | RS-232 control port, 4800 to 115200 |
+| Panel backlight timeout | `select` | Always on, through to 10 minutes |
 | Reboot | `button` | Restarts the matrix |
 | Clear *preset* | `button` | Empties a preset slot |
 | *output* display volume up / down / mute | `button` | Over CEC |
@@ -125,6 +127,9 @@ curl -s -X POST http://<matrix>/cgi-bin/instr \
 | `set ext-audio mode` | `mode` | 0=bind to input, 1=bind to output, 2=audio matrix |
 | `reboot` | `reboot: 1` | ~10s offline |
 | `set lcd on time` | `lcd on time` | this is the `mode` field in `get system status` |
+| `set baudrate` | `baudrate` | ids start at **1**: 1=4800 … 6=115200 |
+| `set tpg` | — | named in the web UI's command map but never called, so its payload is unknown |
+| `set factory` | `factory: 1` | not exposed |
 | `cec command` | `object`, `port`, `index` | `object` 0=input 1=output; `port` is a **mask over all ports**, not a port number; outputs number power as 0=on 1=off, inputs as 1=on 2=off |
 | `set cec index` | `inputindex`, `outputindex` | persists the UI's port selection; not needed, since `cec command` carries its own mask |
 

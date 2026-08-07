@@ -70,6 +70,8 @@ CMD_PRESET_CLEAR: Final = "preset clear"
 CMD_PRESET_NAME: Final = "preset name"
 CMD_SET_INPUT_NAME: Final = "set input name"
 CMD_SET_OUTPUT_NAME: Final = "set output name"
+CMD_SET_BAUDRATE: Final = "set baudrate"
+CMD_SET_LCD_ON_TIME: Final = "set lcd on time"
 
 # The web UI caps port names at 32 characters and preset names at 49 bytes.
 MAX_PORT_NAME: Final = 32
@@ -193,6 +195,28 @@ EXT_AUDIO_MODES: Final[dict[int, str]] = {
 }
 EXT_AUDIO_MODE_MATRIX: Final = 2
 
+# RS-232 rate for the serial control port. Ids start at 1, not 0.
+BAUD_RATES: Final[dict[int, str]] = {
+    1: "4800",
+    2: "9600",
+    3: "19200",
+    4: "38400",
+    5: "57600",
+    6: "115200",
+}
+
+# Front panel backlight timeout. Reported as "mode" in get system status,
+# which is not obvious from the field name.
+LCD_ON_TIMES: Final[dict[int, str]] = {
+    0: "always_on",
+    1: "5_seconds",
+    2: "10_seconds",
+    3: "30_seconds",
+    4: "1_minute",
+    5: "5_minutes",
+    6: "10_minutes",
+}
+
 # Note the gap: the firmware has no scaler mode 2.
 SCALER_MODES: Final[dict[int, str]] = {
     0: "bypass",
@@ -296,6 +320,8 @@ class MatrixState:
     # Front panel state.
     panel_locked: bool = False
     beep_enabled: bool = False
+    baud_rate: int = 0
+    lcd_on_time: int = 0
 
     @property
     def input_count(self) -> int:
@@ -486,6 +512,8 @@ class HdcvtMatrixClient:
             ext_audio_output_names=_str_list(audio.get("alloutputname")),
             panel_locked=bool(system.get("lock", 0)),
             beep_enabled=bool(system.get("beep", 0)),
+            baud_rate=int(system.get("baudrate", 0)),
+            lcd_on_time=int(system.get("mode", 0)),
         )
 
     async def async_get_raw_snapshot(self) -> dict[str, Any]:
@@ -621,6 +649,20 @@ class HdcvtMatrixClient:
             {KEY_COMHEAD: CMD_SET_OUTPUT_NAME, "name": name, "index": output}
         )
         _raise_for_result(data, f"renaming output {output}")
+
+    async def async_set_baud_rate(self, rate: int) -> None:
+        """Set the RS-232 rate on the serial control port. See BAUD_RATES."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_BAUDRATE, "baudrate": rate}
+        )
+        _raise_for_result(data, "setting the baud rate")
+
+    async def async_set_lcd_on_time(self, value: int) -> None:
+        """Set the front panel backlight timeout. See LCD_ON_TIMES."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_LCD_ON_TIME, "lcd on time": value}
+        )
+        _raise_for_result(data, "setting the LCD timeout")
 
     async def async_reboot(self) -> None:
         """Restart the matrix.

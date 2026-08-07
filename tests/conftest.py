@@ -118,6 +118,8 @@ DEVICE_RESPONSES: dict[str, dict[str, Any]] = {
     "set arc": {"comhead": "set arc", "result": 1},
     "set edid": {"comhead": "set edid", "result": 1},
     "reboot": {"comhead": "reboot", "result": 1},
+    "set baudrate": {"comhead": "set baudrate", "result": 1},
+    "set lcd on time": {"comhead": "set lcd on time", "result": 1},
     "preset clear": {"comhead": "preset clear", "result": 1},
     "preset name": {"comhead": "preset name", "result": 1},
     "set input name": {"comhead": "set input name", "result": 1},

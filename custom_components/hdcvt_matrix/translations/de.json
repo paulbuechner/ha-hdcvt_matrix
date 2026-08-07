@@ -163,6 +163,21 @@
       },
       "ext_audio_output": {
         "name": "{name} Audioquelle"
+      },
+      "baud_rate": {
+        "name": "Serielle Baudrate"
+      },
+      "lcd_on_time": {
+        "name": "Display-Beleuchtung aus nach",
+        "state": {
+          "always_on": "Immer an",
+          "5_seconds": "5 Sekunden",
+          "10_seconds": "10 Sekunden",
+          "30_seconds": "30 Sekunden",
+          "1_minute": "1 Minute",
+          "5_minutes": "5 Minuten",
+          "10_minutes": "10 Minuten"
+        }
       }
     },
     "text": {

@@ -430,3 +430,49 @@ async def test_audio_mode_selection(
 
     calls = [r for r in session.requests if r["comhead"] == "set ext-audio mode"]
     assert calls == [{"comhead": "set ext-audio mode", "mode": 2}]
+
+
+async def test_baud_rate_decodes_the_firmware_id(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Ids start at 1 here, so 6 is 115200 rather than an off-by-one."""
+    session = await setup_integration(make_session())
+
+    target = er.async_get(hass).async_get_entity_id(
+        "select", DOMAIN, f"{MAC}_baud_rate"
+    )
+    assert target is not None
+    assert get_state(hass, target).state == "115200"
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: target, ATTR_OPTION: "9600"},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "set baudrate"]
+    assert calls == [{"comhead": "set baudrate", "baudrate": 2}]
+
+
+async def test_lcd_timeout_reads_the_mode_field(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """`mode` in get system status is the backlight timeout, not a matrix mode."""
+    session = await setup_integration(make_session())
+
+    target = er.async_get(hass).async_get_entity_id(
+        "select", DOMAIN, f"{MAC}_lcd_on_time"
+    )
+    assert target is not None
+    assert get_state(hass, target).state == "30_seconds"
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: target, ATTR_OPTION: "always_on"},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "set lcd on time"]
+    assert calls == [{"comhead": "set lcd on time", "lcd on time": 0}]
