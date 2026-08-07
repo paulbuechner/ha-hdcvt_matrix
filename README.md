@@ -28,6 +28,12 @@ CEC is one-way here: the matrix sends the command but cannot report whether the 
 
 Port counts come from the device, so a 4×4 gets four routing selects and an 8×8 gets eight.
 
+### Only ten entities are enabled by default
+
+An 8×8 exposes around ninety entities. Adding them all would bury the handful anyone routinely uses, so a fresh install enables only **power, the eight routing selects, and preset recall**. Everything else is registered but disabled — enable what you want under *Settings → Devices & Services → HDCVT HDMI Matrix → entities*, filtering by **Disabled**.
+
+Home Assistant groups them on the device page the same way the matrix's own web UI does: routing under *Controls*, per-port and front-panel settings under *Configuration*, and signal detection under *Diagnostic*.
+
 Everything except Power goes unavailable while the matrix is in standby. Power never does — including when the matrix answers a status read with nothing useful, which would otherwise leave no way to switch it back on.
 
 The preset select reads `unknown` until you pick one. That is deliberate: the firmware reports preset *names* but never which one is active, and there is no command to read a preset's stored routing back, so any other value would be a guess. Routing an individual output after recalling a preset likewise leaves the select showing the preset you last chose.

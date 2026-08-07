@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import aiohttp
 import pytest
@@ -238,6 +238,21 @@ def get_state(hass: HomeAssistant, entity_id: str) -> State:
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Make the custom integration loadable in every test."""
     return
+
+
+@pytest.fixture(autouse=True)
+def auto_enable_all_entities() -> Iterator[None]:
+    """Register even the opt-in entities, so tests can exercise them.
+
+    Most entities ship disabled so a fresh install does not add ~90 of them.
+    Which ones ship enabled is pinned separately in test_defaults.py.
+    """
+    with patch(
+        "homeassistant.helpers.entity.Entity.entity_registry_enabled_default",
+        new_callable=PropertyMock,
+        return_value=True,
+    ):
+        yield
 
 
 @pytest.fixture

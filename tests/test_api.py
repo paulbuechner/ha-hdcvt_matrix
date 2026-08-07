@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import aiohttp
 import pytest
 
 from custom_components.hdcvt_matrix.api import (
+    READ_ATTEMPTS,
     HdcvtMatrixClient,
     MatrixAuthError,
     MatrixConnectionError,
     MatrixResponseError,
 )
 
-from .conftest import make_session
+from .conftest import FakeResponse, make_session
 
 HOST = "192.168.10.60"
 
@@ -175,3 +178,52 @@ async def test_set_power() -> None:
     await client.async_set_power(on=True)
 
     assert session.requests[-1] == {"comhead": "set poweronoff", "power": 1}
+
+
+async def test_a_busy_matrix_does_not_fail_the_poll() -> None:
+    """A heavy command leaves the CGI answering empty for a moment.
+
+    Without a retry that stumble fails the whole update and every entity goes
+    unavailable until the next cycle, which is what a preset recall used to do.
+    """
+    session = make_session()
+    real = session._handler
+    calls = {"n": 0}
+
+    def flaky(payload: dict[str, Any]) -> FakeResponse:
+        calls["n"] += 1
+        if payload["comhead"] == "get video status" and calls["n"] == 1:
+            return FakeResponse("")  # busy: empty body, not an error
+        return real(payload)
+
+    session._handler = flaky
+
+    state = await HdcvtMatrixClient(HOST, session).async_get_state()
+
+    assert state.output_count == 8
+    reads = [r for r in session.requests if r["comhead"] == "get video status"]
+    assert len(reads) == 2, "should have retried the busy read exactly once"
+
+
+async def test_reads_give_up_eventually() -> None:
+    """Retrying is bounded; a genuinely dead matrix still surfaces."""
+    session = make_session(overrides={"get video status": ""})
+    client = HdcvtMatrixClient(HOST, session)
+
+    with pytest.raises(MatrixResponseError):
+        await client.async_get_state()
+
+    reads = [r for r in session.requests if r["comhead"] == "get video status"]
+    assert len(reads) == READ_ATTEMPTS
+
+
+async def test_writes_are_never_retried() -> None:
+    """Writes are not idempotent, so a failure must not be repeated."""
+    session = make_session(overrides={"video switch": ""})
+    client = HdcvtMatrixClient(HOST, session)
+
+    with pytest.raises(MatrixResponseError):
+        await client.async_set_route(output=1, source=2)
+
+    writes = [r for r in session.requests if r["comhead"] == "video switch"]
+    assert len(writes) == 1

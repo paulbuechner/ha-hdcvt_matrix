@@ -47,6 +47,7 @@ class _OutputModeSelect(HdcvtMatrixEntity, SelectEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
     _modes: dict[int, str]
 
     def __init__(
@@ -238,6 +239,7 @@ class HdcvtMatrixEdidSelect(HdcvtMatrixEntity, SelectEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "input_edid"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, source: int) -> None:

@@ -42,6 +42,8 @@ class HdcvtMatrixDisplayPower(HdcvtMatrixEntity, ButtonEntity):
     state it is in.
     """
 
+    _attr_entity_registry_enabled_default = False
+
     def __init__(
         self, coordinator: HdcvtMatrixCoordinator, output: int, *, on: bool
     ) -> None:
@@ -74,6 +76,7 @@ class HdcvtMatrixSavePreset(HdcvtMatrixEntity, ButtonEntity):
     """Overwrite one preset with the routing currently in effect."""
 
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "save_preset"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, index: int) -> None:

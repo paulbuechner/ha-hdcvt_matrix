@@ -42,6 +42,7 @@ class HdcvtMatrixInputSignal(HdcvtMatrixEntity, BinarySensorEntity):
 
     _attr_device_class = BinarySensorDeviceClass.PLUG
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "input_signal"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, port: int) -> None:
@@ -67,6 +68,7 @@ class HdcvtMatrixOutputSink(HdcvtMatrixEntity, BinarySensorEntity):
 
     _attr_device_class = BinarySensorDeviceClass.PLUG
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "output_sink"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, port: int) -> None:

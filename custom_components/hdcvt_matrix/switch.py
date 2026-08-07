@@ -42,6 +42,7 @@ class HdcvtMatrixPanelLockSwitch(HdcvtMatrixEntity, SwitchEntity):
     """Lock the physical buttons on the front of the matrix."""
 
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "panel_lock"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
@@ -66,6 +67,7 @@ class HdcvtMatrixBeepSwitch(HdcvtMatrixEntity, SwitchEntity):
     """The beep the matrix makes on a front panel press."""
 
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "beep"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
@@ -89,6 +91,7 @@ class HdcvtMatrixBeepSwitch(HdcvtMatrixEntity, SwitchEntity):
 class _OutputSwitch(HdcvtMatrixEntity, SwitchEntity):
     """Shared plumbing for the per-output switches."""
 
+    _attr_entity_registry_enabled_default = False
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(

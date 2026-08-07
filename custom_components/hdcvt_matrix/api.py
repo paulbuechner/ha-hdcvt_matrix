@@ -34,6 +34,11 @@ CGI_INSTR: Final = "/cgi-bin/instr"
 # The protocol names its command field this; every payload carries one.
 KEY_COMHEAD: Final = "comhead"
 
+# Reads are retried while the matrix is busy after a heavy command. Writes are
+# not: they are not idempotent.
+READ_ATTEMPTS: Final = 3
+READ_RETRY_DELAY: Final = 0.4
+
 CMD_LOGIN: Final = "login"
 CMD_GET_STATUS: Final = "get status"
 CMD_GET_VIDEO_STATUS: Final = "get video status"
@@ -267,6 +272,27 @@ class HdcvtMatrixClient:
         """Host the client is bound to."""
         return self._host
 
+    async def _async_read(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Send a read command, retrying while the matrix is busy.
+
+        Heavy operations — recalling a preset, changing power, sending CEC —
+        leave the single-threaded CGI unresponsive for a moment, and it answers
+        with an empty body rather than an error. Without a retry that one
+        stumble fails the whole poll and every entity goes unavailable until
+        the next cycle. Reads are idempotent, so retrying is safe.
+        """
+        for attempt in range(READ_ATTEMPTS):
+            try:
+                return await self._async_command(payload)
+            except (MatrixConnectionError, MatrixResponseError):
+                if attempt == READ_ATTEMPTS - 1:
+                    raise
+                _LOGGER.debug(
+                    "%s busy on %r, retrying", self._host, payload[KEY_COMHEAD]
+                )
+                await asyncio.sleep(READ_RETRY_DELAY * (attempt + 1))
+        raise AssertionError  # unreachable, but mypy cannot see that
+
     async def _async_command(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send one command and return the decoded reply."""
         # The firmware serves plain HTTP only; it has no TLS listener at all.
@@ -326,7 +352,7 @@ class HdcvtMatrixClient:
 
     async def async_get_info(self) -> MatrixInfo:
         """Read the immutable identity of the matrix."""
-        data = await self._async_command({KEY_COMHEAD: CMD_GET_STATUS})
+        data = await self._async_read({KEY_COMHEAD: CMD_GET_STATUS})
         mac = str(data.get("macaddress") or "").strip()
         if not mac:
             raise MatrixResponseError(
@@ -348,7 +374,7 @@ class HdcvtMatrixClient:
         and output switches need them, not speculatively. Anything else stays
         in async_get_raw_snapshot, off the polling path.
         """
-        video = await self._async_command({KEY_COMHEAD: CMD_GET_VIDEO_STATUS})
+        video = await self._async_read({KEY_COMHEAD: CMD_GET_VIDEO_STATUS})
 
         power = bool(video.get("power", 1))
         input_names = _str_list(video.get("allinputname"))
@@ -364,9 +390,9 @@ class HdcvtMatrixClient:
             # on.
             return MatrixState(power=False)
 
-        outputs = await self._async_command({KEY_COMHEAD: CMD_GET_OUTPUT_STATUS})
-        inputs = await self._async_command({KEY_COMHEAD: CMD_GET_INPUT_STATUS})
-        system = await self._async_command({KEY_COMHEAD: CMD_GET_SYSTEM_STATUS})
+        outputs = await self._async_read({KEY_COMHEAD: CMD_GET_OUTPUT_STATUS})
+        inputs = await self._async_read({KEY_COMHEAD: CMD_GET_INPUT_STATUS})
+        system = await self._async_read({KEY_COMHEAD: CMD_GET_SYSTEM_STATUS})
 
         # Array-valued fields carry one trailing "all ports" aggregate that the
         # web UI uses for its bulk controls. Trim it off using the port names,
