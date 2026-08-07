@@ -47,9 +47,9 @@ async def test_get_state_trims_trailing_aggregate() -> None:
 async def test_polling_reads_only_what_entities_consume() -> None:
     """The CGI backend is single threaded, so a poll must not fan out.
 
-    Four commands, each backing real entities: routing, the output switches
-    and modes, the input signal sensors, and the front panel switches.
-    Anything else belongs in the diagnostics snapshot.
+    Five commands, each backing real entities: routing, the output switches
+    and modes, the input signal sensors, the front panel switches and the
+    de-embedded audio. Anything else belongs in the diagnostics snapshot.
     """
     session = make_session()
     client = HdcvtMatrixClient(HOST, session)
@@ -61,6 +61,7 @@ async def test_polling_reads_only_what_entities_consume() -> None:
         {"comhead": "get output status"},
         {"comhead": "get input status"},
         {"comhead": "get system status"},
+        {"comhead": "get ext-audio status"},
     ]
 
 

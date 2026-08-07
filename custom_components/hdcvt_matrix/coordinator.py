@@ -223,6 +223,46 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             None,
         )
 
+    async def async_set_ext_audio_route(self, output: int, source: int) -> None:
+        """Route an input to a de-embedded audio output."""
+
+        def apply() -> None:
+            if output <= len(self.data.ext_audio_routes):
+                self.data.ext_audio_routes[output - 1] = source
+
+        await self._async_write(
+            self.client.async_set_ext_audio_route(output, source),
+            f"route audio {source} to audio output {output}",
+            apply,
+        )
+
+    async def async_set_ext_audio_enabled(self, output: int, *, enabled: bool) -> None:
+        """Enable or disable a de-embedded audio output."""
+
+        def apply() -> None:
+            if output <= len(self.data.ext_audio_enabled):
+                self.data.ext_audio_enabled[output - 1] = enabled
+
+        await self._async_write(
+            self.client.async_set_ext_audio_enabled(output, enabled=enabled),
+            f"set audio output {output}",
+            apply,
+        )
+
+    async def async_set_ext_audio_mode(self, mode: int) -> None:
+        """Set how the de-embedded audio outputs are driven."""
+
+        def apply() -> None:
+            self.data.ext_audio_mode = mode
+
+        await self._async_write(
+            self.client.async_set_ext_audio_mode(mode), "set the audio mode", apply
+        )
+
+    async def async_reboot(self) -> None:
+        """Restart the matrix."""
+        await self._async_write(self.client.async_reboot(), "reboot the matrix", None)
+
     async def async_save_preset(self, index: int) -> None:
         """Store the current routing into a one-based preset slot."""
         await self._async_write(

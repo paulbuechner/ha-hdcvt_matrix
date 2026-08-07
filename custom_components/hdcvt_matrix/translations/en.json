@@ -39,6 +39,16 @@
           "username": "Username",
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Move the matrix to a new address",
+        "description": "Point this entry at a different IP, or update its credentials. It must still be the same matrix.",
+        "data": {
+          "use_default_credentials": "Use the factory credentials (Admin / admin)",
+          "host": "Host",
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -52,7 +62,9 @@
       "cannot_connect": "Failed to connect to the discovered matrix.",
       "unsupported_device": "The discovered device is not a supported HDCVT matrix.",
       "reauth_successful": "Credentials updated.",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "wrong_matrix": "That is a different matrix. Reconfigure is for moving this one, not swapping it.",
+      "reconfigure_successful": "Updated."
     }
   },
   "entity": {
@@ -73,6 +85,9 @@
       },
       "display_off": {
         "name": "{name} display off"
+      },
+      "reboot": {
+        "name": "Reboot"
       }
     },
     "switch": {
@@ -93,6 +108,9 @@
       },
       "output_arc": {
         "name": "{name} ARC"
+      },
+      "ext_audio_out": {
+        "name": "{name} audio out"
       }
     },
     "select": {
@@ -122,6 +140,17 @@
       },
       "input_edid": {
         "name": "{name} EDID"
+      },
+      "ext_audio_mode": {
+        "name": "Audio mode",
+        "state": {
+          "bind_to_input": "Bind to input",
+          "bind_to_output": "Bind to output",
+          "audio_matrix": "Audio matrix"
+        }
+      },
+      "ext_audio_output": {
+        "name": "{name} audio source"
       }
     }
   },

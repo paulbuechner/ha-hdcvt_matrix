@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -22,12 +22,13 @@ async def async_setup_entry(  # NOSONAR
     entry: HdcvtMatrixConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up preset save buttons and CEC display power per output."""
+    """Set up reboot, preset save buttons and CEC display power per output."""
     coordinator = entry.runtime_data
-    entities: list[ButtonEntity] = [
+    entities: list[ButtonEntity] = [HdcvtMatrixReboot(coordinator)]
+    entities.extend(
         HdcvtMatrixSavePreset(coordinator, index)
         for index in range(1, len(coordinator.data.preset_names) + 1)
-    ]
+    )
     for output in range(1, coordinator.data.output_count + 1):
         entities.append(HdcvtMatrixDisplayPower(coordinator, output, on=True))
         entities.append(HdcvtMatrixDisplayPower(coordinator, output, on=False))
@@ -96,3 +97,24 @@ class HdcvtMatrixSavePreset(HdcvtMatrixEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Store the current routing into this preset."""
         await self.coordinator.async_save_preset(self._index)
+
+
+class HdcvtMatrixReboot(HdcvtMatrixEntity, ButtonEntity):
+    """Restart the matrix.
+
+    Opt-in like the rest, which doubles as the safety catch: a stray tap on a
+    dashboard should not drop every display for ten seconds.
+    """
+
+    _attr_device_class = ButtonDeviceClass.RESTART
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+    _attr_translation_key = "reboot"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the reboot button."""
+        super().__init__(coordinator, "reboot")
+
+    async def async_press(self) -> None:
+        """Restart the matrix."""
+        await self.coordinator.async_reboot()

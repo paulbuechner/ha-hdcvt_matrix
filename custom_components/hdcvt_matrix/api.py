@@ -61,6 +61,11 @@ CMD_SET_BEEP: Final = "set beep"
 CMD_CEC_COMMAND: Final = "cec command"
 CMD_SET_ARC: Final = "set arc"
 CMD_SET_EDID: Final = "set edid"
+CMD_REBOOT: Final = "reboot"
+CMD_GET_EXT_AUDIO: Final = "get ext-audio status"
+CMD_EXT_AUDIO_SWITCH: Final = "ext-audio switch"
+CMD_SET_EXT_AUDIO_OUT: Final = "set ext-audio out"
+CMD_SET_EXT_AUDIO_MODE: Final = "set ext-audio mode"
 
 # CEC targets. "port" is a mask over all ports, not a port number, and it is
 # passed per command: it does not disturb the selection stored by
@@ -132,6 +137,15 @@ EDID_PROFILES: Final[dict[int, str]] = {
     46: "COPY_FROM_OUTPUT_7",
     47: "COPY_FROM_OUTPUT_8",
 }
+
+# How the de-embedded audio outputs are driven. In the bind modes the audio
+# follows a video port; only in matrix mode is it routed independently.
+EXT_AUDIO_MODES: Final[dict[int, str]] = {
+    0: "bind_to_input",
+    1: "bind_to_output",
+    2: "audio_matrix",
+}
+EXT_AUDIO_MODE_MATRIX: Final = 2
 
 # Note the gap: the firmware has no scaler mode 2.
 SCALER_MODES: Final[dict[int, str]] = {
@@ -228,6 +242,11 @@ class MatrixState:
     # ARC on the output, and the EDID profile id on each input.
     arc_enabled: list[bool] = field(default_factory=list)
     input_edids: list[int] = field(default_factory=list)
+    # De-embedded audio: mode, per-output source, per-output enable.
+    ext_audio_mode: int = 0
+    ext_audio_routes: list[int] = field(default_factory=list)
+    ext_audio_enabled: list[bool] = field(default_factory=list)
+    ext_audio_output_names: list[str] = field(default_factory=list)
     # Front panel state.
     panel_locked: bool = False
     beep_enabled: bool = False
@@ -393,6 +412,7 @@ class HdcvtMatrixClient:
         outputs = await self._async_read({KEY_COMHEAD: CMD_GET_OUTPUT_STATUS})
         inputs = await self._async_read({KEY_COMHEAD: CMD_GET_INPUT_STATUS})
         system = await self._async_read({KEY_COMHEAD: CMD_GET_SYSTEM_STATUS})
+        audio = await self._async_read({KEY_COMHEAD: CMD_GET_EXT_AUDIO})
 
         # Array-valued fields carry one trailing "all ports" aggregate that the
         # web UI uses for its bulk controls. Trim it off using the port names,
@@ -414,6 +434,10 @@ class HdcvtMatrixClient:
             arc_enabled=_bool_list(outputs.get("allarc"), outs),
             input_edids=_int_list(inputs.get("edid"))[:ins],
             scaler_modes=_int_list(outputs.get("allscaler"))[:outs],
+            ext_audio_mode=int(audio.get("mode", 0)),
+            ext_audio_routes=_int_list(audio.get("allsource")),
+            ext_audio_enabled=[bool(v) for v in _int_list(audio.get("allout"))],
+            ext_audio_output_names=_str_list(audio.get("alloutputname")),
             panel_locked=bool(system.get("lock", 0)),
             beep_enabled=bool(system.get("beep", 0)),
         )
@@ -502,6 +526,36 @@ class HdcvtMatrixClient:
             {KEY_COMHEAD: CMD_SET_EDID, "edid": [source, profile]}
         )
         _raise_for_result(data, f"setting EDID on input {source}")
+
+    async def async_set_ext_audio_route(self, output: int, source: int) -> None:
+        """Route a one-based input to a one-based de-embedded audio output."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_EXT_AUDIO_SWITCH, "source": [output, source]}
+        )
+        _raise_for_result(data, f"routing audio {source} to audio output {output}")
+
+    async def async_set_ext_audio_enabled(self, output: int, *, enabled: bool) -> None:
+        """Enable or disable a one-based de-embedded audio output."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_EXT_AUDIO_OUT, "out": [output, int(enabled)]}
+        )
+        _raise_for_result(data, f"setting audio output {output}")
+
+    async def async_set_ext_audio_mode(self, mode: int) -> None:
+        """Set how the de-embedded audio outputs are driven."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_EXT_AUDIO_MODE, "mode": mode}
+        )
+        _raise_for_result(data, "setting the audio mode")
+
+    async def async_reboot(self) -> None:
+        """Restart the matrix.
+
+        Takes it off the network for roughly ten seconds, so the next few
+        polls will fail and the entities go unavailable until it is back.
+        """
+        data = await self._async_command({KEY_COMHEAD: CMD_REBOOT, "reboot": 1})
+        _raise_for_result(data, "rebooting")
 
     async def async_set_panel_locked(self, *, locked: bool) -> None:
         """Lock or unlock the front panel buttons."""

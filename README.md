@@ -21,8 +21,14 @@ Local control for HDCVT web-controlled HDMI matrices (tested on **HDP-MXC88A**, 
 | *input* signal | `binary_sensor` | A source is detected, diagnostic |
 | *output* display | `binary_sensor` | A sink is detected, diagnostic |
 | *output* display on / off | `button` | Powers the attached display over CEC |
+| Audio mode | `select` | Bind to input / bind to output / audio matrix |
+| *output* audio source | `select` | De-embedded audio routing, matrix mode only |
+| *output* audio out | `switch` | Enables a de-embedded audio output |
 | Front panel lock | `switch` | Locks the physical buttons |
 | Beeper | `switch` | Front panel beep |
+| Reboot | `button` | Restarts the matrix |
+
+The de-embedded audio outputs are a second matrix with their own mode. In the two bind modes the audio follows a video port and routing sent to it is ignored, so those selects report unavailable outside **audio matrix** mode rather than silently doing nothing.
 
 CEC is one-way here: the matrix sends the command but cannot report whether the display obeyed, or what state it is in. Hence buttons rather than a switch. They stay available even when no sink is detected, because a display in standby may drop hotplug detect — which would otherwise hide the button that wakes it.
 
@@ -82,6 +88,11 @@ curl -s -X POST http://<matrix>/cgi-bin/instr \
 | `set beep` | `beep: 0\|1` | scalar, not an array |
 | `set edid` | `edid: [input, id]` | 1-36 fixed profiles, 37-39 user slots, 40-47 copy from an output |
 | `set arc` | `arc: [output, 0\|1]` | |
+| `ext-audio switch` | `source: [output, input]` | de-embedded audio routing |
+| `set ext-audio out` | `out: [output, 0\|1]` | |
+| `set ext-audio mode` | `mode` | 0=bind to input, 1=bind to output, 2=audio matrix |
+| `reboot` | `reboot: 1` | ~10s offline |
+| `set lcd on time` | `lcd on time` | this is the `mode` field in `get system status` |
 | `cec command` | `object`, `port`, `index` | `object` 0=input 1=output; `port` is a **mask over all ports**, not a port number; outputs number power as 0=on 1=off, inputs as 1=on 2=off |
 | `set cec index` | `inputindex`, `outputindex` | persists the UI's port selection; not needed, since `cec command` carries its own mask |
 

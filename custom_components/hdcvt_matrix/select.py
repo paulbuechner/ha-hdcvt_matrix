@@ -9,7 +9,13 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
-from .api import EDID_PROFILES, HDCP_MODES, SCALER_MODES
+from .api import (
+    EDID_PROFILES,
+    EXT_AUDIO_MODE_MATRIX,
+    EXT_AUDIO_MODES,
+    HDCP_MODES,
+    SCALER_MODES,
+)
 from .coordinator import HdcvtMatrixCoordinator
 from .entity import HdcvtMatrixEntity
 
@@ -35,6 +41,11 @@ async def async_setup_entry(  # NOSONAR
     entities.extend(
         HdcvtMatrixEdidSelect(coordinator, source)
         for source in range(1, coordinator.data.input_count + 1)
+    )
+    entities.append(HdcvtMatrixExtAudioModeSelect(coordinator))
+    entities.extend(
+        HdcvtMatrixExtAudioSelect(coordinator, output)
+        for output in range(1, len(coordinator.data.ext_audio_output_names) + 1)
     )
     async_add_entities(entities)
 
@@ -272,3 +283,93 @@ class HdcvtMatrixEdidSelect(HdcvtMatrixEntity, SelectEntity):
                 await self.coordinator.async_set_edid(self._source, profile)
                 return
         raise ServiceValidationError(f"{option!r} is not a known EDID profile")
+
+
+class HdcvtMatrixExtAudioModeSelect(HdcvtMatrixEntity, SelectEntity):
+    """How the de-embedded audio outputs are driven."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+    _attr_translation_key = "ext_audio_mode"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the audio mode select."""
+        super().__init__(coordinator, "ext_audio_mode")
+        self._attr_options = list(EXT_AUDIO_MODES.values())
+
+    @property
+    def available(self) -> bool:
+        """Audio settings mean nothing while the matrix is in standby."""
+        return super().available and self.coordinator.data.power
+
+    @property
+    def current_option(self) -> str | None:
+        """Map the firmware mode to an option."""
+        return EXT_AUDIO_MODES.get(self.coordinator.data.ext_audio_mode)
+
+    async def async_select_option(self, option: str) -> None:
+        """Apply the chosen audio mode."""
+        for mode, name in EXT_AUDIO_MODES.items():
+            if name == option:
+                await self.coordinator.async_set_ext_audio_mode(mode)
+                return
+        raise ServiceValidationError(f"{option!r} is not a valid audio mode")
+
+
+class HdcvtMatrixExtAudioSelect(HdcvtMatrixEntity, SelectEntity):
+    """Which input feeds one de-embedded audio output.
+
+    Only meaningful in matrix mode: in the two bind modes the audio follows a
+    video port and the matrix ignores routing sent here.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+    _attr_translation_key = "ext_audio_output"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator, output: int) -> None:
+        """Initialise the audio routing select for a one-based output."""
+        super().__init__(coordinator, f"ext_audio_{output}")
+        self._output = output
+        names = coordinator.data.ext_audio_output_names
+        self._attr_translation_placeholders = {
+            "name": names[output - 1] if output <= len(names) else f"Audio {output}"
+        }
+
+    @property
+    def available(self) -> bool:
+        """Unavailable outside matrix mode, where routing does nothing."""
+        return (
+            super().available
+            and self.coordinator.data.power
+            and self.coordinator.data.ext_audio_mode == EXT_AUDIO_MODE_MATRIX
+        )
+
+    @property
+    def options(self) -> list[str]:
+        """Input names as stored on the matrix."""
+        return list(self.coordinator.data.input_names)
+
+    @property
+    def current_option(self) -> str | None:
+        """The input currently feeding this audio output."""
+        routes = self.coordinator.data.ext_audio_routes
+        names = self.coordinator.data.input_names
+        if self._output > len(routes):
+            return None
+        source = routes[self._output - 1]
+        if not 1 <= source <= len(names):
+            return None
+        return names[source - 1]
+
+    async def async_select_option(self, option: str) -> None:
+        """Route the named input to this audio output."""
+        names = self.coordinator.data.input_names
+        try:
+            source = names.index(option) + 1
+        except ValueError as err:
+            raise ServiceValidationError(
+                f"{option!r} is not an input on this matrix"
+            ) from err
+
+        await self.coordinator.async_set_ext_audio_route(self._output, source)

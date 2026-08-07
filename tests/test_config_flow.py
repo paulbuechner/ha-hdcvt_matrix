@@ -346,3 +346,51 @@ async def test_reauth_updates_credentials(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_PASSWORD] == "new"
+
+
+async def test_reconfigure_moves_the_entry(
+    hass: HomeAssistant, patch_clientsession: PatchClientsession
+) -> None:
+    """A matrix that moved to a new IP keeps its entry and its entities."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id=UNIQUE_ID, data={CONF_HOST: "192.168.10.99"}
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    with patch_clientsession(make_session()):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: HOST, CONF_USE_DEFAULT_CREDENTIALS: False},
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_HOST] == HOST
+
+
+async def test_reconfigure_refuses_a_different_matrix(
+    hass: HomeAssistant, patch_clientsession: PatchClientsession
+) -> None:
+    """Rebinding an entry to another unit would orphan all of its entities."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="6c:df:fb:99:99:99",
+        data={CONF_HOST: "192.168.10.99"},
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    with patch_clientsession(make_session()):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: HOST, CONF_USE_DEFAULT_CREDENTIALS: False},
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "wrong_matrix"
+    assert entry.data[CONF_HOST] == "192.168.10.99"

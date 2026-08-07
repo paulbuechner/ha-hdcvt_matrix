@@ -10,7 +10,11 @@ from homeassistant.components.select import (
 from homeassistant.components.select import (
     DOMAIN as SELECT_DOMAIN,
 )
-from homeassistant.const import ATTR_ENTITY_ID, STATE_UNKNOWN
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
@@ -352,3 +356,77 @@ async def test_edid_offers_every_profile(
     assert options[0] == "1080P,2.0CH"
     assert "User1_EDID" in options
     assert "COPY_FROM_OUTPUT_8" in options
+
+
+def ext_audio_id(hass: HomeAssistant, output: int) -> str:
+    """Resolve the de-embedded audio routing select for a one-based output."""
+    resolved = er.async_get(hass).async_get_entity_id(
+        "select", DOMAIN, f"{MAC}_ext_audio_{output}"
+    )
+    assert resolved is not None
+    return resolved
+
+
+async def test_audio_routing_is_unavailable_outside_matrix_mode(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """In the bind modes the matrix ignores audio routing, so do not offer it."""
+    await setup_integration(make_session())  # fixture reports mode 0, bind to input
+
+    assert get_state(hass, ext_audio_id(hass, 1)).state == STATE_UNAVAILABLE
+
+
+async def test_audio_routing_works_in_matrix_mode(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Matrix mode is the one where the audio outputs route independently."""
+    session = await setup_integration(
+        make_session(
+            overrides={
+                "get ext-audio status": {
+                    "comhead": "get ext-audio status",
+                    "power": 1,
+                    "mode": 2,
+                    "allsource": [1, 2, 3, 4, 5, 6, 7, 8],
+                    "allout": [0] * 8,
+                    "alloutputname": [f"Output{i}" for i in range(1, 9)],
+                    "index": 1,
+                }
+            }
+        )
+    )
+
+    assert get_state(hass, ext_audio_id(hass, 2)).state == "Input2"
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: ext_audio_id(hass, 2), ATTR_OPTION: "Input5"},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "ext-audio switch"]
+    assert calls == [{"comhead": "ext-audio switch", "source": [2, 5]}]
+
+
+async def test_audio_mode_selection(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The mode select drives how the audio outputs behave."""
+    session = await setup_integration(make_session())
+
+    target = er.async_get(hass).async_get_entity_id(
+        "select", DOMAIN, f"{MAC}_ext_audio_mode"
+    )
+    assert target is not None
+    assert get_state(hass, target).state == "bind_to_input"
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: target, ATTR_OPTION: "audio_matrix"},
+        blocking=True,
+    )
+
+    calls = [r for r in session.requests if r["comhead"] == "set ext-audio mode"]
+    assert calls == [{"comhead": "set ext-audio mode", "mode": 2}]

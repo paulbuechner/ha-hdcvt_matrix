@@ -35,6 +35,10 @@ async def async_setup_entry(  # NOSONAR
         entities.append(HdcvtMatrixOutputSwitch(coordinator, output))
         entities.append(HdcvtMatrixMuteSwitch(coordinator, output))
         entities.append(HdcvtMatrixArcSwitch(coordinator, output))
+    entities.extend(
+        HdcvtMatrixExtAudioSwitch(coordinator, output)
+        for output in range(1, len(coordinator.data.ext_audio_output_names) + 1)
+    )
     async_add_entities(entities)
 
 
@@ -211,3 +215,41 @@ class HdcvtMatrixArcSwitch(_OutputSwitch):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable ARC."""
         await self.coordinator.async_set_arc(self._output, enabled=False)
+
+
+class HdcvtMatrixExtAudioSwitch(HdcvtMatrixEntity, SwitchEntity):
+    """Enable one de-embedded audio output."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+    _attr_translation_key = "ext_audio_out"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator, output: int) -> None:
+        """Initialise the audio output switch for a one-based output."""
+        super().__init__(coordinator, f"ext_audio_{output}_out")
+        self._output = output
+        names = coordinator.data.ext_audio_output_names
+        self._attr_translation_placeholders = {
+            "name": names[output - 1] if output <= len(names) else f"Audio {output}"
+        }
+
+    @property
+    def available(self) -> bool:
+        """Audio settings mean nothing while the matrix is in standby."""
+        return super().available and self.coordinator.data.power
+
+    @property
+    def is_on(self) -> bool | None:
+        """True when this audio output is enabled."""
+        enabled = self.coordinator.data.ext_audio_enabled
+        if self._output > len(enabled):
+            return None
+        return enabled[self._output - 1]
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable this audio output."""
+        await self.coordinator.async_set_ext_audio_enabled(self._output, enabled=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable this audio output."""
+        await self.coordinator.async_set_ext_audio_enabled(self._output, enabled=False)

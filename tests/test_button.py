@@ -154,3 +154,21 @@ async def test_display_buttons_ignore_sink_detection(
     state = hass.states.get(display_id(hass, 1, "on"))
     assert state is not None
     assert state.state != "unavailable"
+
+
+async def test_reboot_sends_the_flag(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Reboot carries a scalar flag, like the other system commands."""
+    session = await setup_integration(make_session())
+
+    target = er.async_get(hass).async_get_entity_id("button", DOMAIN, f"{MAC}_reboot")
+    assert target is not None
+
+    await hass.services.async_call(
+        BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: target}, blocking=True
+    )
+
+    assert [r for r in session.requests if r["comhead"] == "reboot"] == [
+        {"comhead": "reboot", "reboot": 1}
+    ]

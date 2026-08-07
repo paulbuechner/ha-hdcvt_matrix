@@ -208,6 +208,41 @@ class HdcvtMatrixConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Point an existing entry at a new address, or new credentials."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            host = user_input[CONF_HOST].strip()
+            credentials = _resolve_credentials(user_input)
+            info, error = await self._async_validate(
+                host,
+                credentials.get(CONF_USERNAME),
+                credentials.get(CONF_PASSWORD),
+            )
+            if info is not None:
+                # Guard against being pointed at a different matrix: the entry
+                # already owns a MAC, and silently rebinding it would orphan
+                # every entity attached to the old one.
+                await self.async_set_unique_id(format_mac(info.mac_address))
+                self._abort_if_unique_id_mismatch(reason="wrong_matrix")
+                return self.async_update_reload_and_abort(
+                    entry, data_updates={CONF_HOST: host, **credentials}
+                )
+            errors["base"] = error or ERROR_UNKNOWN
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                USER_SCHEMA,
+                user_input or {CONF_HOST: entry.data[CONF_HOST]},
+            ),
+            errors=errors,
+        )
+
     async def async_step_dhcp(
         self, discovery_info: DhcpServiceInfo
     ) -> ConfigFlowResult:
