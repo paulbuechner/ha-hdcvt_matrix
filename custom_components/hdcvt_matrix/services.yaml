@@ -1,0 +1,68 @@
+# CEC relay. device_id picks the matrix; port picks the HDMI port.
+send_display_command:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: hdcvt_matrix
+    port:
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 8
+          mode: box
+    command:
+      required: true
+      selector:
+        select:
+          translation_key: send_display_command_command
+          options:
+          - mute
+          - power_off
+          - power_on
+          - source
+          - volume_down
+          - volume_up
+send_source_command:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: hdcvt_matrix
+    port:
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 8
+          mode: box
+    command:
+      required: true
+      selector:
+        select:
+          translation_key: send_source_command_command
+          options:
+          - back
+          - down
+          - enter
+          - fast_forward
+          - left
+          - menu
+          - mute
+          - next
+          - pause
+          - play
+          - power_off
+          - power_on
+          - previous
+          - rewind
+          - right
+          - stop
+          - up
+          - volume_down
+          - volume_up

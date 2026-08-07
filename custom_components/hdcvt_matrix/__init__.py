@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import HdcvtMatrixClient, MatrixAuthError, MatrixError
 from .const import DOMAIN, MANUFACTURER, PLATFORMS
 from .coordinator import HdcvtMatrixCoordinator
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,6 +23,10 @@ type HdcvtMatrixConfigEntry = ConfigEntry[HdcvtMatrixCoordinator]
 
 async def async_setup_entry(hass: HomeAssistant, entry: HdcvtMatrixConfigEntry) -> bool:
     """Set up a matrix from a config entry."""
+    # Actions are global rather than per entry, so register them once.
+    if not hass.services.has_service(DOMAIN, "send_display_command"):
+        async_setup_services(hass)
+
     client = HdcvtMatrixClient(
         entry.data[CONF_HOST],
         async_get_clientsession(hass),

@@ -189,5 +189,78 @@
         }
       }
     }
+  },
+  "services": {
+    "send_display_command": {
+      "name": "Send display command",
+      "description": "Relay a CEC command to the display attached to an output.",
+      "fields": {
+        "port": {
+          "name": "Output",
+          "description": "Which output the display is on."
+        },
+        "command": {
+          "name": "Command",
+          "description": "The CEC command to send."
+        },
+        "device_id": {
+          "name": "Matrix",
+          "description": "Which matrix to send through."
+        }
+      }
+    },
+    "send_source_command": {
+      "name": "Send source command",
+      "description": "Relay a CEC command to the device attached to an input.",
+      "fields": {
+        "port": {
+          "name": "Input",
+          "description": "Which input the device is on."
+        },
+        "command": {
+          "name": "Command",
+          "description": "The CEC command to send."
+        },
+        "device_id": {
+          "name": "Matrix",
+          "description": "Which matrix to send through."
+        }
+      }
+    }
+  },
+  "selector": {
+    "send_display_command_command": {
+      "options": {
+        "power_on": "Power on",
+        "power_off": "Power off",
+        "mute": "Mute",
+        "volume_down": "Volume down",
+        "volume_up": "Volume up",
+        "source": "Source"
+      }
+    },
+    "send_source_command_command": {
+      "options": {
+        "power_on": "Power on",
+        "power_off": "Power off",
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right",
+        "enter": "Enter",
+        "menu": "Menu",
+        "back": "Back",
+        "previous": "Previous",
+        "play": "Play",
+        "next": "Next",
+        "rewind": "Rewind",
+        "pause": "Pause",
+        "fast_forward": "Fast forward",
+        "stop": "Stop",
+        "mute": "Mute",
+        "volume_down": "Volume down",
+        "volume_up": "Volume up"
+      }
+    }
   }
 }

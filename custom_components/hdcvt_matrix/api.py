@@ -89,6 +89,41 @@ CEC_OUTPUT_MUTE: Final = 2
 CEC_OUTPUT_VOLUME_DOWN: Final = 3
 CEC_OUTPUT_VOLUME_UP: Final = 4
 
+# Displays accept only these. The web UI hides the rest and refuses to send
+# anything above 6 to an output.
+CEC_OUTPUT_COMMANDS: Final[dict[str, int]] = {
+    "power_on": CEC_OUTPUT_POWER_ON,
+    "power_off": CEC_OUTPUT_POWER_OFF,
+    "mute": CEC_OUTPUT_MUTE,
+    "volume_down": CEC_OUTPUT_VOLUME_DOWN,
+    "volume_up": CEC_OUTPUT_VOLUME_UP,
+    "source": 5,
+}
+
+# Source devices get the full remote. Note power is 1/2 here where an output
+# uses 0/1 for the same two actions.
+CEC_INPUT_COMMANDS: Final[dict[str, int]] = {
+    "power_on": 1,
+    "power_off": 2,
+    "up": 3,
+    "left": 4,
+    "enter": 5,
+    "right": 6,
+    "menu": 7,
+    "down": 8,
+    "back": 9,
+    "previous": 10,
+    "play": 11,
+    "next": 12,
+    "rewind": 13,
+    "pause": 14,
+    "fast_forward": 15,
+    "stop": 16,
+    "mute": 17,
+    "volume_down": 18,
+    "volume_up": 19,
+}
+
 # Firmware value -> option key. Labels live in the translation files.
 HDCP_MODES: Final[dict[int, str]] = {
     1: "hdcp_1_4",

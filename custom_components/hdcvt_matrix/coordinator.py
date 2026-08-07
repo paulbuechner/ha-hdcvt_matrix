@@ -13,6 +13,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
+    CEC_OBJECT_INPUT,
     CEC_OBJECT_OUTPUT,
     HdcvtMatrixClient,
     MatrixAuthError,
@@ -257,6 +258,17 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
 
         await self._async_write(
             self.client.async_set_ext_audio_mode(mode), "set the audio mode", apply
+        )
+
+    async def async_send_input_cec(self, source: int, command: int) -> None:
+        """Send a CEC command to the device on a one-based input."""
+        mask = [1 if port == source - 1 else 0 for port in range(self.data.input_count)]
+        await self._async_write(
+            self.client.async_send_cec(
+                object_type=CEC_OBJECT_INPUT, port_mask=mask, command=command
+            ),
+            f"send a CEC command to input {source}",
+            None,
         )
 
     async def async_clear_preset(self, index: int) -> None:

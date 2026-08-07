@@ -189,5 +189,78 @@
         }
       }
     }
+  },
+  "services": {
+    "send_display_command": {
+      "name": "Anzeigebefehl senden",
+      "description": "Sendet einen CEC-Befehl an die an einem Ausgang angeschlossene Anzeige.",
+      "fields": {
+        "port": {
+          "name": "Ausgang",
+          "description": "An welchem Ausgang die Anzeige hängt."
+        },
+        "command": {
+          "name": "Befehl",
+          "description": "Der zu sendende CEC-Befehl."
+        },
+        "device_id": {
+          "name": "Matrix",
+          "description": "Über welche Matrix gesendet wird."
+        }
+      }
+    },
+    "send_source_command": {
+      "name": "Quellbefehl senden",
+      "description": "Sendet einen CEC-Befehl an das an einem Eingang angeschlossene Gerät.",
+      "fields": {
+        "port": {
+          "name": "Eingang",
+          "description": "An welchem Eingang das Gerät hängt."
+        },
+        "command": {
+          "name": "Befehl",
+          "description": "Der zu sendende CEC-Befehl."
+        },
+        "device_id": {
+          "name": "Matrix",
+          "description": "Über welche Matrix gesendet wird."
+        }
+      }
+    }
+  },
+  "selector": {
+    "send_display_command_command": {
+      "options": {
+        "power_on": "Einschalten",
+        "power_off": "Ausschalten",
+        "mute": "Stumm",
+        "volume_down": "Leiser",
+        "volume_up": "Lauter",
+        "source": "Quelle"
+      }
+    },
+    "send_source_command_command": {
+      "options": {
+        "power_on": "Einschalten",
+        "power_off": "Ausschalten",
+        "up": "Hoch",
+        "down": "Runter",
+        "left": "Links",
+        "right": "Rechts",
+        "enter": "Auswählen",
+        "menu": "Menü",
+        "back": "Zurück",
+        "previous": "Vorheriger",
+        "play": "Wiedergabe",
+        "next": "Nächster",
+        "rewind": "Zurückspulen",
+        "pause": "Pause",
+        "fast_forward": "Vorspulen",
+        "stop": "Stopp",
+        "mute": "Stumm",
+        "volume_down": "Leiser",
+        "volume_up": "Lauter"
+      }
+    }
   }
 }

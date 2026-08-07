@@ -2,7 +2,32 @@
 
 Local control for HDCVT web-controlled HDMI matrices (tested on **HDP-MXC88A**, 8×8, 18 Gbps). No cloud, no polling of anything but the device itself.
 
-> Status: early. Discovery, authentication and preset recall work. Per-output routing lands next.
+Routing, presets, power, per-port video settings, de-embedded audio and CEC are all covered. The protocol was reverse-engineered from the device's own web interface; see [Protocol notes](#protocol-notes).
+
+## Quick start
+
+### Using HACS (recommended)
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=paulbuechner&repository=ha-hdcvt_matrix&category=integration)
+
+1. Use the button above, or add `paulbuechner/ha-hdcvt_matrix` as a custom repository in HACS
+2. Download the integration and restart Home Assistant
+
+### Manual installation
+
+1. Copy `custom_components/hdcvt_matrix` into your Home Assistant `config/custom_components/`
+2. Restart Home Assistant
+
+### Setup
+
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=hdcvt_matrix)
+
+1. The matrix is usually found on its own — check *Settings → Devices & Services* for a discovered card
+2. Otherwise use the button above, or *Add Integration* and search for **HDCVT HDMI Matrix**
+3. Enter the matrix's IP address
+4. Leave **Use the factory credentials** ticked unless you changed the web interface login
+
+Ten entities appear straight away: power, one routing select per output, and preset recall. Everything else is [opt-in](#only-ten-entities-are-enabled-by-default).
 
 ## Entities
 
