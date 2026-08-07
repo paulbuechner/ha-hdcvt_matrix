@@ -1,0 +1,7 @@
+{
+  "name": "HDCVT HDMI Matrix",
+  "homeassistant": "2024.12.0",
+  "hacs": "2.0.0",
+  "zip_release": true,
+  "filename": "hdcvt_matrix.zip"
+}

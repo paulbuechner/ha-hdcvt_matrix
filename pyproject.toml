@@ -1,0 +1,101 @@
+[project]
+name = "ha-hdcvt_matrix"
+version = "0.1.0"
+description = "Home Assistant integration for HDCVT web-controlled HDMI matrices"
+requires-python = ">=3.13"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+# Pin so the IDE plugin, the local env and CI cannot disagree on formatting.
+required-version = ">=0.16.0"
+
+[tool.ruff.lint]
+# Roughly the ground SonarQube's Python rules cover: bug patterns, security
+# hotspots, cognitive complexity and dead code.
+select = [
+  "A",     # builtins shadowing
+  "ARG",   # unused arguments
+  "ASYNC",
+  "B",     # bugbear
+  "BLE",   # blind except
+  "C90",   # mccabe complexity
+  "D",     # pydocstyle
+  "DTZ",   # naive datetime
+  "E",     # pycodestyle
+  "ERA",   # commented-out code
+  "F",     # pyflakes
+  "FBT",   # boolean traps
+  "FURB",
+  "G",     # logging format
+  "I",     # isort
+  "ISC",
+  "LOG",
+  "N",     # pep8-naming
+  "PERF",
+  "PGH",   # blanket noqa / type-ignore
+  "PIE",
+  "PL",    # pylint
+  "PTH",
+  "Q",
+  "RET",   # unnecessary returns
+  "RSE",
+  "RUF",
+  "S",     # bandit
+  "SIM",
+  "SLF",   # private member access
+  "T20",   # stray print
+  "TID",
+  "TRY",   # exception antipatterns
+  "UP",    # pyupgrade
+  "W",
+]
+ignore = [
+  "D203",    # conflicts with D211
+  "D213",    # conflicts with D212
+  "COM812",  # ruff's own docs: redundant with the formatter
+  "TRY003",  # messages carry the host and command, which is the useful part
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Home Assistant fixes these signatures; the unused parameters are not ours to
+# drop. Entity `**kwargs` and the `hass` argument to `async_setup_entry` are
+# both mandated by the platform contract.
+"custom_components/*" = ["ARG001", "ARG002", "ARG004"]
+"tests/*" = [
+  "D100",     # module docstrings on test modules
+  "D103",
+  "S101",     # asserts are the point of pytest
+  "S105",     # fixture credentials are fake by construction
+  "S106",
+  "PLR2004",  # asserting against literals is what a test is
+  "ARG001",   # pytest injects fixtures by parameter name
+  "ARG002",   # fakes must match the signature they stand in for
+  "SLF001",   # exercising a private helper directly is fair in a unit test
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+# The client constructor takes six, four of them keyword-only with defaults.
+# Splitting it would read worse than the warning it silences.
+max-args = 6
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+# custom_components is a namespace package, so mypy needs the repo root as the
+# base to resolve custom_components.hdcvt_matrix rather than hdcvt_matrix.
+explicit_package_bases = true
+namespace_packages = true
+mypy_path = "."
+# Home Assistant ships types; its transitive deps largely do not.
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

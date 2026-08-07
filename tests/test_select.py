@@ -1,0 +1,218 @@
+"""Tests for the HDCVT HDMI Matrix preset select."""
+
+from __future__ import annotations
+
+import pytest
+from homeassistant.components.select import (
+    ATTR_OPTION,
+    SERVICE_SELECT_OPTION,
+)
+from homeassistant.components.select import (
+    DOMAIN as SELECT_DOMAIN,
+)
+from homeassistant.const import ATTR_ENTITY_ID, STATE_UNKNOWN
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import entity_registry as er
+
+from custom_components.hdcvt_matrix.const import DOMAIN
+
+from .conftest import MAC, SetupIntegration, get_state, make_session
+
+
+def entity_id(hass: HomeAssistant) -> str:
+    """Resolve the select by unique id, rather than guessing its slug."""
+    resolved = er.async_get(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_preset")
+    assert resolved is not None
+    return resolved
+
+
+def output_id(hass: HomeAssistant, output: int) -> str:
+    """Resolve the select for a one-based output."""
+    resolved = er.async_get(hass).async_get_entity_id(
+        "select", DOMAIN, f"{MAC}_output_{output}"
+    )
+    assert resolved is not None
+    return resolved
+
+
+async def test_one_select_per_output(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """An 8x8 gets eight routing selects, sized from the device."""
+    await setup_integration(make_session())
+
+    for output in range(1, 9):
+        assert hass.states.get(output_id(hass, output)) is not None
+    assert (
+        er.async_get(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_output_9")
+        is None
+    )
+
+
+async def test_output_reports_its_current_input(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Output 3 is fed by input 3 in the fixture, shown by input name."""
+    await setup_integration(make_session())
+
+    state = get_state(hass, output_id(hass, 3))
+    assert state.state == "Input3"
+    assert state.attributes["options"] == [f"Input{i}" for i in range(1, 9)]
+
+
+async def test_routing_sends_output_then_input(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Selecting an input routes it to that output, one-based both ways."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: output_id(hass, 5), ATTR_OPTION: "Input2"},
+        blocking=True,
+    )
+
+    switches = [r for r in session.requests if r["comhead"] == "video switch"]
+    assert switches == [{"comhead": "video switch", "source": [5, 2]}]
+
+
+async def test_routing_updates_state(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The select reflects the new input without waiting for the next poll."""
+    await setup_integration(make_session())
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: output_id(hass, 5), ATTR_OPTION: "Input2"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert get_state(hass, output_id(hass, 5)).state == "Input2"
+
+
+async def test_routing_rejects_an_unknown_input(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """An input the matrix does not have must not reach the device."""
+    session = await setup_integration(make_session())
+
+    target = output_id(hass, 1)
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            SELECT_DOMAIN,
+            SERVICE_SELECT_OPTION,
+            {ATTR_ENTITY_ID: target, ATTR_OPTION: "Nope"},
+            blocking=True,
+        )
+
+    assert not [r for r in session.requests if r["comhead"] == "video switch"]
+
+
+async def test_options_come_from_the_device(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Preset names on the matrix become the dropdown options."""
+    await setup_integration(make_session())
+
+    state = hass.states.get(entity_id(hass))
+    assert state is not None
+    assert state.attributes["options"] == [
+        "Desk PC",
+        "Laptop",
+        "Console",
+        "Preset4",
+        "Preset5",
+        "Preset6",
+        "Preset7",
+        "Preset8",
+    ]
+
+
+async def test_state_is_unknown_before_we_apply_one(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The firmware never reports an active preset, so we must not invent one."""
+    await setup_integration(make_session())
+
+    assert get_state(hass, entity_id(hass)).state == STATE_UNKNOWN
+
+
+async def test_selecting_sends_the_one_based_index(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Picking the third option recalls preset 3."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: entity_id(hass), ATTR_OPTION: "Console"},
+        blocking=True,
+    )
+
+    preset_calls = [r for r in session.requests if r["comhead"] == "preset set"]
+    assert preset_calls == [{"comhead": "preset set", "index": 3}]
+
+
+async def test_state_reflects_the_applied_preset(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Once we have applied one, the select reports it."""
+    await setup_integration(make_session())
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: entity_id(hass), ATTR_OPTION: "Laptop"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert get_state(hass, entity_id(hass)).state == "Laptop"
+
+
+async def test_unknown_option_is_rejected(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """An option the matrix does not have must not reach the device."""
+    session = await setup_integration(make_session())
+
+    target = entity_id(hass)
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            SELECT_DOMAIN,
+            SERVICE_SELECT_OPTION,
+            {ATTR_ENTITY_ID: target, ATTR_OPTION: "Nope"},
+            blocking=True,
+        )
+
+    assert not [r for r in session.requests if r["comhead"] == "preset set"]
+
+
+async def test_device_refusal_surfaces(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """A result:0 from the matrix becomes an error, not a silent success."""
+    session = await setup_integration(
+        make_session(overrides={"preset set": {"comhead": "preset set", "result": 0}})
+    )
+
+    target = entity_id(hass)
+
+    with pytest.raises(HomeAssistantError, match="preset"):
+        await hass.services.async_call(
+            SELECT_DOMAIN,
+            SERVICE_SELECT_OPTION,
+            {ATTR_ENTITY_ID: target, ATTR_OPTION: "Desk PC"},
+            blocking=True,
+        )
+
+    assert get_state(hass, target).state == STATE_UNKNOWN
+    assert session.requests[-1] == {"comhead": "preset set", "index": 1}

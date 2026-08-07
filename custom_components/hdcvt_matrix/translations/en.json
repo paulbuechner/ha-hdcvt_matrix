@@ -1,0 +1,105 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Connect to your HDMI matrix",
+        "description": "Enter the address of the matrix web interface. Leave the credentials empty if the matrix has no login configured.",
+        "data": {
+          "use_default_credentials": "Use the factory credentials (Admin / admin)",
+          "host": "Host",
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "use_default_credentials": "Ticked, this ignores the two fields below and signs in with the factory defaults. Untick it if you changed the login on the matrix.",
+          "host": "IP address or hostname, for example 192.168.1.60",
+          "username": "The user you sign in with on the matrix web interface, not your Home Assistant account",
+          "password": "The password for that user"
+        }
+      },
+      "discovery_confirm": {
+        "title": "Set up {name}",
+        "description": "A {name} was found at {host}. Enter its web interface credentials, or leave them empty if it has no login configured.",
+        "data": {
+          "use_default_credentials": "Use the factory credentials (Admin / admin)",
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "use_default_credentials": "Ticked, this ignores the two fields below and signs in with the factory defaults. Untick it if you changed the login on the matrix.",
+          "username": "The user you sign in with on the matrix web interface, not your Home Assistant account",
+          "password": "The password for that user"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-enter your matrix credentials",
+        "description": "The matrix at {host} no longer accepts the stored credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check the address and that the matrix is powered on.",
+      "invalid_auth": "The matrix rejected these credentials.",
+      "unsupported_device": "That address answered, but not like an HDCVT matrix.",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This matrix is already set up.",
+      "cannot_connect": "Failed to connect to the discovered matrix.",
+      "unsupported_device": "The discovered device is not a supported HDCVT matrix.",
+      "reauth_successful": "Credentials updated.",
+      "unknown": "Unexpected error"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "input_signal": {
+        "name": "{name} signal"
+      },
+      "output_sink": {
+        "name": "{name} display"
+      }
+    },
+    "button": {
+      "save_preset": {
+        "name": "Save {name}"
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Power"
+      },
+      "output_stream": {
+        "name": "{name} stream"
+      },
+      "output_mute": {
+        "name": "{name} audio mute"
+      }
+    },
+    "select": {
+      "preset": {
+        "name": "Preset"
+      },
+      "output": {
+        "name": "{name}"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling",
+        "data": {
+          "scan_interval": "Seconds between polls"
+        },
+        "data_description": {
+          "scan_interval": "How often to re-read the matrix. Its web backend handles one request at a time, so shorter is not always better."
+        }
+      }
+    }
+  }
+}

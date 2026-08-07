@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  release:
+    name: Publish release asset
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # HACS reads the version from the manifest, so a mismatch would ship a
+      # release that reports the wrong version. Fail loudly rather than
+      # rewriting the manifest behind your back.
+      - name: Check the manifest version matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(jq -r .version custom_components/hdcvt_matrix/manifest.json)
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::tag $tag does not match manifest version $manifest."
+            echo "Bump version in custom_components/hdcvt_matrix/manifest.json first."
+            exit 1
+          fi
+          echo "version $manifest"
+
+      # Zipped so HACS installs a single asset rather than walking the tree.
+      # The archive root is the integration directory itself.
+      - name: Build the release asset
+        run: |
+          cd custom_components/hdcvt_matrix
+          zip -r "${GITHUB_WORKSPACE}/hdcvt_matrix.zip" . -x '*__pycache__*'
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" hdcvt_matrix.zip --clobber

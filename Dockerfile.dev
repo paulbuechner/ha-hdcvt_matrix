@@ -1,0 +1,37 @@
+# Test environment for this integration.
+#
+# Home Assistant's test harness cannot run on Windows: homeassistant.runner
+# imports fcntl, which is POSIX-only, so pytest dies during collection. Point
+# your IDE's test interpreter at this image and tests run in Linux instead.
+#
+#   docker build -f Dockerfile.dev -t hdcvt-matrix-dev .
+#   docker run --rm -v "$PWD:/w" hdcvt-matrix-dev pytest -q
+FROM python:3.13
+
+LABEL org.opencontainers.image.title="ha-hdcvt_matrix dev"
+LABEL org.opencontainers.image.description="Linux test environment for the HDCVT \
+HDMI Matrix Home Assistant integration. Exists because homeassistant.runner \
+imports fcntl and so cannot be collected by pytest on Windows."
+LABEL org.opencontainers.image.source="https://github.com/paulbuechner/ha-hdcvt_matrix"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.base.name="docker.io/library/python:3.13"
+
+WORKDIR /w
+
+COPY requirements-dev.txt .
+
+# One layer: dependencies system wide, then an unprivileged user to run as.
+# That user only needs to read those dependencies and write caches to its home.
+RUN pip install --no-cache-dir -r requirements-dev.txt \
+    && useradd --create-home --uid 1000 dev \
+    && chown dev:dev /w
+
+USER dev
+
+# The project is bind-mounted and owned by the host, so keep tool caches off
+# it. They stay real caches, so --last-failed and mypy's incremental mode keep
+# working; they just live in the container user's home.
+ENV PYTEST_ADDOPTS="-o cache_dir=/home/dev/.pytest_cache"
+ENV MYPY_CACHE_DIR=/home/dev/.mypy_cache
+
+CMD ["pytest", "-q"]

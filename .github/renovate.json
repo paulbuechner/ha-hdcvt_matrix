@@ -1,0 +1,42 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices"],
+  "timezone": "Europe/Berlin",
+  "minimumReleaseAge": "3 days",
+  "osvVulnerabilityAlerts": true,
+  "dependencyDashboardOSVVulnerabilitySummary": "all",
+  "commitMessagePrefix": "build:",
+  "packageRules": [
+    {
+      "description": "Patch bumps are mostly noise for a repo this size. They still show on the dependency dashboard if you want to pull one in manually",
+      "matchUpdateTypes": ["patch"],
+      "enabled": false
+    },
+    {
+      "description": "...except when the patch is the security fix. Later rules win, so this re-enables exactly that case",
+      "matchUpdateTypes": ["patch"],
+      "isVulnerabilityAlert": true,
+      "enabled": true
+    },
+    {
+      "description": "Actions are digest-pinned; group the bumps into one PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "commitMessagePrefix": "ci:"
+    },
+    {
+      "description": "The floor here has to stay in step with the homeassistant key in hacs.json, so bump it deliberately rather than automatically",
+      "matchPackageNames": ["homeassistant"],
+      "enabled": false
+    },
+    {
+      "description": "ruff formatting output changes between releases, so keep this in step with required-version in pyproject.toml",
+      "matchPackageNames": ["ruff"],
+      "addLabels": ["needs-pyproject-bump"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "minimumReleaseAge": null
+  }
+}

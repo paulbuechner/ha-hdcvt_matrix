@@ -1,0 +1,4 @@
+# Everything here runs on Linux: Home Assistant, the test container, CI.
+# Normalise to LF so a Windows checkout cannot commit CRLF into a shell
+# script or the Dockerfile.
+* text=auto eol=lf

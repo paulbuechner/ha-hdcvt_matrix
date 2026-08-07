@@ -1,0 +1,378 @@
+"""Async client for HDCVT web-controlled HDMI matrices.
+
+The firmware exposes a single JSON-RPC-ish endpoint at ``/cgi-bin/instr``. Every
+request is a POST whose body carries a ``comhead`` naming the command; responses
+echo the ``comhead`` back alongside the payload.
+
+Two firmware quirks drive the design here:
+
+* Unknown commands are answered with **plain text** (``not wait comhead [...]``)
+  rather than JSON, so replies are parsed defensively.
+* The API is **sessionless**. ``login`` validates credentials and returns
+  ``result: 1``/``result: 0``, but it hands out no token and every other command
+  answers unauthenticated. Credentials are therefore verified explicitly at
+  setup rather than relied upon to gate reads.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from dataclasses import dataclass, field
+from types import TracebackType
+from typing import Any, Final, Protocol
+
+import aiohttp
+
+from .const import DEFAULT_PORT, DEFAULT_TIMEOUT
+
+_LOGGER = logging.getLogger(__name__)
+
+CGI_INSTR: Final = "/cgi-bin/instr"
+
+# The protocol names its command field this; every payload carries one.
+KEY_COMHEAD: Final = "comhead"
+
+CMD_LOGIN: Final = "login"
+CMD_GET_STATUS: Final = "get status"
+CMD_GET_VIDEO_STATUS: Final = "get video status"
+CMD_GET_OUTPUT_STATUS: Final = "get output status"
+CMD_GET_INPUT_STATUS: Final = "get input status"
+CMD_GET_SYSTEM_STATUS: Final = "get system status"
+CMD_GET_NETWORK: Final = "get network"
+CMD_VIDEO_SWITCH: Final = "video switch"
+CMD_SET_POWER: Final = "set poweronoff"
+CMD_PRESET_SET: Final = "preset set"
+CMD_PRESET_SAVE: Final = "preset save"
+CMD_TX_STREAM: Final = "tx stream"
+CMD_SET_AUDIO_MUTE: Final = "set output audio mute"
+
+
+class _ResponseLike(Protocol):
+    """The part of an HTTP response this client touches."""
+
+    def raise_for_status(self) -> None:
+        """Raise if the reply carried an error status."""
+
+    async def text(self) -> str:
+        """Return the body as text."""
+
+
+class _ResponseContext(Protocol):
+    """An async context manager yielding a response."""
+
+    async def __aenter__(self) -> _ResponseLike:
+        """Enter the context."""
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Leave the context."""
+
+
+class MatrixSession(Protocol):
+    """The slice of ``aiohttp.ClientSession`` this client depends on.
+
+    Narrower than the real thing on purpose. It documents the exact surface
+    used, and lets a test supply a fake that genuinely satisfies the contract
+    rather than being cast into place.
+    """
+
+    def post(
+        self, url: str, *, json: Any, timeout: aiohttp.ClientTimeout
+    ) -> _ResponseContext:
+        """POST a JSON body and return the response context."""
+
+
+class MatrixError(Exception):
+    """Base error for all matrix client failures."""
+
+
+class MatrixConnectionError(MatrixError):
+    """The matrix could not be reached."""
+
+
+class MatrixResponseError(MatrixError):
+    """The matrix replied with something we cannot parse or did not expect."""
+
+
+class MatrixAuthError(MatrixError):
+    """The matrix rejected the supplied credentials."""
+
+
+@dataclass(frozen=True, slots=True)
+class MatrixInfo:
+    """Identity of the matrix, read once during setup."""
+
+    model: str
+    hostname: str
+    mac_address: str
+    firmware: str
+
+
+@dataclass(slots=True)
+class MatrixState:
+    """Mutable state of the matrix, refreshed on every poll."""
+
+    power: bool
+    # Index is the zero-based output, value is the one-based input feeding it.
+    routes: list[int] = field(default_factory=list)
+    input_names: list[str] = field(default_factory=list)
+    output_names: list[str] = field(default_factory=list)
+    preset_names: list[str] = field(default_factory=list)
+    # A source is detected on this input / a sink is detected on this output.
+    input_active: list[bool] = field(default_factory=list)
+    output_connected: list[bool] = field(default_factory=list)
+    # Output stream enabled, and output audio muted.
+    output_enabled: list[bool] = field(default_factory=list)
+    audio_muted: list[bool] = field(default_factory=list)
+
+    @property
+    def input_count(self) -> int:
+        """Number of physical inputs."""
+        return len(self.input_names)
+
+    @property
+    def output_count(self) -> int:
+        """Number of physical outputs."""
+        return len(self.output_names)
+
+
+class HdcvtMatrixClient:
+    """Talk to a single HDCVT matrix over HTTP."""
+
+    def __init__(
+        self,
+        host: str,
+        session: MatrixSession,
+        *,
+        username: str | None = None,
+        password: str | None = None,
+        port: int = DEFAULT_PORT,
+        timeout: int = DEFAULT_TIMEOUT,
+    ) -> None:
+        """Initialise the client."""
+        self._host = host
+        self._session = session
+        self._username = username
+        self._password = password
+        self._port = port
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        # The CGI backend is single threaded; serialise so a burst of commands
+        # cannot make it drop replies.
+        self._lock = asyncio.Lock()
+
+    @property
+    def host(self) -> str:
+        """Host the client is bound to."""
+        return self._host
+
+    async def _async_command(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Send one command and return the decoded reply."""
+        # The firmware serves plain HTTP only; it has no TLS listener at all.
+        url = f"http://{self._host}:{self._port}{CGI_INSTR}"  # NOSONAR
+        async with self._lock:
+            try:
+                async with self._session.post(
+                    url, json=payload, timeout=self._timeout
+                ) as response:
+                    response.raise_for_status()
+                    # The firmware mislabels its content type, so decode by hand.
+                    body = await response.text()
+            except TimeoutError as err:
+                raise MatrixConnectionError(
+                    f"Timed out talking to {self._host}"
+                ) from err
+            except aiohttp.ClientError as err:
+                raise MatrixConnectionError(
+                    f"Cannot reach {self._host}: {err}"
+                ) from err
+
+        try:
+            data = json.loads(body)
+        except ValueError as err:
+            raise MatrixResponseError(
+                f"{self._host} returned a non-JSON reply to "
+                f"{payload[KEY_COMHEAD]!r}: {body[:120]!r}"
+            ) from err
+
+        if not isinstance(data, dict):
+            raise MatrixResponseError(
+                f"{self._host} returned {type(data).__name__}, expected an object"
+            )
+        return data
+
+    async def async_login(self) -> None:
+        """Verify the configured credentials.
+
+        No-op when no username is configured, since the API answers reads
+        without authentication anyway.
+        """
+        if not self._username:
+            return
+
+        data = await self._async_command(
+            {
+                KEY_COMHEAD: CMD_LOGIN,
+                "user": self._username,
+                "password": self._password or "",
+            }
+        )
+        if data.get("result") != 1:
+            raise MatrixAuthError(
+                f"{self._host} rejected the credentials for {self._username!r}"
+            )
+        _LOGGER.debug("Credentials accepted by %s", self._host)
+
+    async def async_get_info(self) -> MatrixInfo:
+        """Read the immutable identity of the matrix."""
+        data = await self._async_command({KEY_COMHEAD: CMD_GET_STATUS})
+        mac = str(data.get("macaddress") or "").strip()
+        if not mac:
+            raise MatrixResponseError(
+                f"{self._host} reported no MAC address; not an HDCVT matrix?"
+            )
+        return MatrixInfo(
+            model=str(data.get("model") or "HDMI Matrix"),
+            hostname=str(data.get("hostname") or self._host),
+            mac_address=mac.upper(),
+            firmware=str(data.get("version") or ""),
+        )
+
+    async def async_get_state(self) -> MatrixState:
+        """Read the routing and port state.
+
+        Three requests, and no more: the CGI backend is single threaded and
+        this runs on every poll, so it reads only what entities consume. The
+        port-detection and output commands are here because the binary sensors
+        and output switches need them, not speculatively. Anything else stays
+        in async_get_raw_snapshot, off the polling path.
+        """
+        video = await self._async_command({KEY_COMHEAD: CMD_GET_VIDEO_STATUS})
+
+        power = bool(video.get("power", 1))
+        input_names = _str_list(video.get("allinputname"))
+        output_names = _str_list(video.get("alloutputname"))
+        if not input_names or not output_names:
+            if power:
+                raise MatrixResponseError(
+                    f"{self._host} reported no port names; cannot size the matrix"
+                )
+            # In standby the IP module stays reachable but the matrix itself may
+            # report nothing useful. Surface that as "off" rather than failing
+            # the update, so the power control stays available to switch it back
+            # on.
+            return MatrixState(power=False)
+
+        outputs = await self._async_command({KEY_COMHEAD: CMD_GET_OUTPUT_STATUS})
+        inputs = await self._async_command({KEY_COMHEAD: CMD_GET_INPUT_STATUS})
+
+        # Array-valued fields carry one trailing "all ports" aggregate that the
+        # web UI uses for its bulk controls. Trim it off using the port names,
+        # which are the only arrays sized to the real port count.
+        outs = len(output_names)
+        ins = len(input_names)
+
+        return MatrixState(
+            power=power,
+            routes=_int_list(video.get("allsource"))[:outs],
+            input_names=input_names,
+            output_names=output_names,
+            preset_names=_str_list(video.get("allname")),
+            input_active=_bool_list(inputs.get("inactive"), ins),
+            output_connected=_bool_list(outputs.get("allconnect"), outs),
+            output_enabled=_bool_list(outputs.get("allout"), outs),
+            audio_muted=_bool_list(outputs.get("allaudiomute"), outs),
+        )
+
+    async def async_get_raw_snapshot(self) -> dict[str, Any]:
+        """Read every status command verbatim, for diagnostics.
+
+        Off the polling path on purpose: this is several requests and only runs
+        when someone downloads diagnostics.
+        """
+        snapshot: dict[str, Any] = {}
+        for comhead in (
+            CMD_GET_STATUS,
+            CMD_GET_VIDEO_STATUS,
+            CMD_GET_OUTPUT_STATUS,
+            CMD_GET_INPUT_STATUS,
+            CMD_GET_SYSTEM_STATUS,
+            CMD_GET_NETWORK,
+        ):
+            try:
+                snapshot[comhead] = await self._async_command({KEY_COMHEAD: comhead})
+            except MatrixError as err:
+                snapshot[comhead] = {"error": str(err)}
+        return snapshot
+
+    async def async_set_route(self, output: int, source: int) -> None:
+        """Route one-based ``source`` to one-based ``output``."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_VIDEO_SWITCH, "source": [output, source]}
+        )
+        _raise_for_result(data, f"routing input {source} to output {output}")
+
+    async def async_set_power(self, *, on: bool) -> None:
+        """Switch the matrix on or into standby."""
+        data = await self._async_command({KEY_COMHEAD: CMD_SET_POWER, "power": int(on)})
+        _raise_for_result(data, "setting power")
+
+    async def async_apply_preset(self, index: int) -> None:
+        """Recall the stored preset at one-based ``index``."""
+        data = await self._async_command({KEY_COMHEAD: CMD_PRESET_SET, "index": index})
+        _raise_for_result(data, f"recalling preset {index}")
+
+    async def async_save_preset(self, index: int) -> None:
+        """Store the current routing into the preset at one-based ``index``."""
+        data = await self._async_command({KEY_COMHEAD: CMD_PRESET_SAVE, "index": index})
+        _raise_for_result(data, f"saving preset {index}")
+
+    async def async_set_output_enabled(self, output: int, *, enabled: bool) -> None:
+        """Enable or disable the stream on a one-based output."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_TX_STREAM, "out": [output, int(enabled)]}
+        )
+        _raise_for_result(data, f"setting stream on output {output}")
+
+    async def async_set_audio_muted(self, output: int, *, muted: bool) -> None:
+        """Mute or unmute the audio on a one-based output."""
+        data = await self._async_command(
+            {KEY_COMHEAD: CMD_SET_AUDIO_MUTE, "mute": [output, int(muted)]}
+        )
+        _raise_for_result(data, f"setting audio mute on output {output}")
+
+
+def _raise_for_result(data: dict[str, Any], action: str) -> None:
+    """Raise when the firmware reports a command as failed."""
+    if data.get("result") != 1:
+        raise MatrixResponseError(f"Matrix refused {action}: {data}")
+
+
+def _bool_list(value: Any, size: int) -> list[bool]:
+    """Coerce a firmware array into bools, trimmed to the real port count."""
+    return [bool(item) for item in _int_list(value)[:size]]
+
+
+def _int_list(value: Any) -> list[int]:
+    """Coerce a firmware array into ints, dropping anything unparsable."""
+    if not isinstance(value, list):
+        return []
+    out: list[int] = []
+    for item in value:
+        try:
+            out.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _str_list(value: Any) -> list[str]:
+    """Coerce a firmware array into stripped strings."""
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value]

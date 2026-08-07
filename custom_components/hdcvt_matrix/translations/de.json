@@ -1,0 +1,105 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Mit der HDMI-Matrix verbinden",
+        "description": "Gib die Adresse der Matrix-Weboberfläche ein. Lass die Zugangsdaten leer, wenn für die Matrix kein Login eingerichtet ist.",
+        "data": {
+          "use_default_credentials": "Werkszugangsdaten verwenden (Admin / admin)",
+          "host": "Host",
+          "username": "Benutzername",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "use_default_credentials": "Wenn aktiviert, werden die beiden Felder unten ignoriert und die Werkseinstellungen verwendet. Deaktiviere die Option, wenn du das Login an der Matrix geändert hast.",
+          "host": "IP-Adresse oder Hostname, zum Beispiel 192.168.1.60",
+          "username": "Der Benutzer der Matrix-Weboberfläche, nicht dein Home-Assistant-Konto",
+          "password": "Das Passwort dieses Benutzers"
+        }
+      },
+      "discovery_confirm": {
+        "title": "{name} einrichten",
+        "description": "Unter {host} wurde eine {name} gefunden. Gib die Zugangsdaten der Weboberfläche ein oder lass sie leer, wenn kein Login eingerichtet ist.",
+        "data": {
+          "use_default_credentials": "Werkszugangsdaten verwenden (Admin / admin)",
+          "username": "Benutzername",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "use_default_credentials": "Wenn aktiviert, werden die beiden Felder unten ignoriert und die Werkseinstellungen verwendet. Deaktiviere die Option, wenn du das Login an der Matrix geändert hast.",
+          "username": "Der Benutzer der Matrix-Weboberfläche, nicht dein Home-Assistant-Konto",
+          "password": "Das Passwort dieses Benutzers"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Zugangsdaten der Matrix erneut eingeben",
+        "description": "Die Matrix unter {host} akzeptiert die gespeicherten Zugangsdaten nicht mehr.",
+        "data": {
+          "username": "Benutzername",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen. Prüfe die Adresse und ob die Matrix eingeschaltet ist.",
+      "invalid_auth": "Die Matrix hat diese Zugangsdaten abgelehnt.",
+      "unsupported_device": "Diese Adresse antwortet, aber nicht wie eine HDCVT-Matrix.",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "abort": {
+      "already_configured": "Diese Matrix ist bereits eingerichtet.",
+      "cannot_connect": "Verbindung zur gefundenen Matrix fehlgeschlagen.",
+      "unsupported_device": "Das gefundene Gerät ist keine unterstützte HDCVT-Matrix.",
+      "reauth_successful": "Zugangsdaten aktualisiert.",
+      "unknown": "Unerwarteter Fehler"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "input_signal": {
+        "name": "{name} Signal"
+      },
+      "output_sink": {
+        "name": "{name} Anzeige"
+      }
+    },
+    "button": {
+      "save_preset": {
+        "name": "{name} speichern"
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Strom"
+      },
+      "output_stream": {
+        "name": "{name} Stream"
+      },
+      "output_mute": {
+        "name": "{name} Ton stumm"
+      }
+    },
+    "select": {
+      "preset": {
+        "name": "Preset"
+      },
+      "output": {
+        "name": "{name}"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Abfrageintervall",
+        "data": {
+          "scan_interval": "Sekunden zwischen Abfragen"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft die Matrix neu gelesen wird. Ihr Webdienst verarbeitet nur eine Anfrage gleichzeitig, kürzer ist also nicht immer besser."
+        }
+      }
+    }
+  }
+}

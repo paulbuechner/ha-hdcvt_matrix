@@ -1,0 +1,80 @@
+"""Tests for the HDCVT HDMI Matrix preset save buttons."""
+
+from __future__ import annotations
+
+import pytest
+from homeassistant.components.button.const import DOMAIN as BUTTON_DOMAIN
+from homeassistant.components.button.const import SERVICE_PRESS
+from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
+
+from custom_components.hdcvt_matrix.const import DOMAIN
+
+from .conftest import MAC, SetupIntegration, make_session
+
+STANDBY = {"get video status": {"comhead": "get video status", "power": 0}}
+
+
+def button_id(hass: HomeAssistant, index: int) -> str:
+    """Resolve the save button for a one-based preset slot."""
+    resolved = er.async_get(hass).async_get_entity_id(
+        "button", DOMAIN, f"{MAC}_save_preset_{index}"
+    )
+    assert resolved is not None
+    return resolved
+
+
+async def test_one_button_per_preset(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Eight preset slots produce eight save buttons."""
+    await setup_integration(make_session())
+
+    for index in range(1, 9):
+        assert hass.states.get(button_id(hass, index)) is not None
+
+
+async def test_press_saves_that_slot(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Pressing sends the one-based slot index."""
+    session = await setup_integration(make_session())
+
+    await hass.services.async_call(
+        BUTTON_DOMAIN,
+        SERVICE_PRESS,
+        {ATTR_ENTITY_ID: button_id(hass, 2)},
+        blocking=True,
+    )
+
+    saves = [r for r in session.requests if r["comhead"] == "preset save"]
+    assert saves == [{"comhead": "preset save", "index": 2}]
+
+
+async def test_device_refusal_surfaces(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """A result:0 becomes an error rather than a silent no-op."""
+    await setup_integration(
+        make_session(overrides={"preset save": {"comhead": "preset save", "result": 0}})
+    )
+    target = button_id(hass, 1)
+
+    with pytest.raises(HomeAssistantError, match="save preset"):
+        await hass.services.async_call(
+            BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: target}, blocking=True
+        )
+
+
+async def test_unavailable_in_standby(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Saving a routing preset is meaningless while the matrix is off."""
+    await setup_integration(make_session(overrides=STANDBY))
+
+    assert (
+        er.async_get(hass).async_get_entity_id("button", DOMAIN, f"{MAC}_save_preset_1")
+        is None
+    )
