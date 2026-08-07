@@ -23,9 +23,6 @@ ERROR_INVALID_AUTH: Final = "invalid_auth"
 ERROR_UNKNOWN: Final = "unknown"
 ERROR_UNSUPPORTED_DEVICE: Final = "unsupported_device"
 
-DEFAULT_PORT: Final = 80
-DEFAULT_TIMEOUT: Final = 10
-
 # Seconds between polls. The CGI backend is single threaded, so the floor is
 # deliberately not 1: hammering it makes it drop replies.
 DEFAULT_SCAN_INTERVAL: Final = 10

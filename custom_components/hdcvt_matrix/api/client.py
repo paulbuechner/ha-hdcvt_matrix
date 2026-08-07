@@ -19,210 +19,59 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, Final, Protocol
+from typing import Any, Protocol
 
 import aiohttp
 
-from .const import DEFAULT_PORT, DEFAULT_TIMEOUT
+from .commands import (
+    CGI_INSTR,
+    CMD_CEC_COMMAND,
+    CMD_EXT_AUDIO_SWITCH,
+    CMD_GET_EXT_AUDIO,
+    CMD_GET_INPUT_STATUS,
+    CMD_GET_NETWORK,
+    CMD_GET_OUTPUT_STATUS,
+    CMD_GET_STATUS,
+    CMD_GET_SYSTEM_STATUS,
+    CMD_GET_VIDEO_STATUS,
+    CMD_LOGIN,
+    CMD_PRESET_CLEAR,
+    CMD_PRESET_NAME,
+    CMD_PRESET_SAVE,
+    CMD_PRESET_SET,
+    CMD_REBOOT,
+    CMD_SET_ARC,
+    CMD_SET_AUDIO_MUTE,
+    CMD_SET_BAUDRATE,
+    CMD_SET_BEEP,
+    CMD_SET_EDID,
+    CMD_SET_EXT_AUDIO_MODE,
+    CMD_SET_EXT_AUDIO_OUT,
+    CMD_SET_INPUT_NAME,
+    CMD_SET_LCD_ON_TIME,
+    CMD_SET_OUTPUT_NAME,
+    CMD_SET_PANEL_LOCK,
+    CMD_SET_POWER,
+    CMD_SET_SCALER,
+    CMD_TX_HDCP,
+    CMD_TX_STREAM,
+    CMD_VIDEO_SWITCH,
+    DEFAULT_PORT,
+    DEFAULT_TIMEOUT,
+    KEY_COMHEAD,
+    READ_ATTEMPTS,
+    READ_RETRY_DELAY,
+)
+from .exceptions import (
+    MatrixAuthError,
+    MatrixConnectionError,
+    MatrixError,
+    MatrixResponseError,
+)
+from .models import MatrixInfo, MatrixState
 
 _LOGGER = logging.getLogger(__name__)
-
-CGI_INSTR: Final = "/cgi-bin/instr"
-
-# The protocol names its command field this; every payload carries one.
-KEY_COMHEAD: Final = "comhead"
-
-# Reads are retried while the matrix is busy after a heavy command. Writes are
-# not: they are not idempotent.
-READ_ATTEMPTS: Final = 3
-READ_RETRY_DELAY: Final = 0.4
-
-CMD_LOGIN: Final = "login"
-CMD_GET_STATUS: Final = "get status"
-CMD_GET_VIDEO_STATUS: Final = "get video status"
-CMD_GET_OUTPUT_STATUS: Final = "get output status"
-CMD_GET_INPUT_STATUS: Final = "get input status"
-CMD_GET_SYSTEM_STATUS: Final = "get system status"
-CMD_GET_NETWORK: Final = "get network"
-CMD_VIDEO_SWITCH: Final = "video switch"
-CMD_SET_POWER: Final = "set poweronoff"
-CMD_PRESET_SET: Final = "preset set"
-CMD_PRESET_SAVE: Final = "preset save"
-CMD_TX_STREAM: Final = "tx stream"
-CMD_SET_AUDIO_MUTE: Final = "set output audio mute"
-CMD_TX_HDCP: Final = "tx hdcp"
-# The web UI's own command map says "video scaler", but the firmware rejects
-# that and only answers to "set video scaler". Verified against the device.
-CMD_SET_SCALER: Final = "set video scaler"
-CMD_SET_PANEL_LOCK: Final = "set panel lock"
-CMD_SET_BEEP: Final = "set beep"
-CMD_CEC_COMMAND: Final = "cec command"
-CMD_SET_ARC: Final = "set arc"
-CMD_SET_EDID: Final = "set edid"
-CMD_REBOOT: Final = "reboot"
-CMD_GET_EXT_AUDIO: Final = "get ext-audio status"
-CMD_EXT_AUDIO_SWITCH: Final = "ext-audio switch"
-CMD_SET_EXT_AUDIO_OUT: Final = "set ext-audio out"
-CMD_SET_EXT_AUDIO_MODE: Final = "set ext-audio mode"
-CMD_PRESET_CLEAR: Final = "preset clear"
-CMD_PRESET_NAME: Final = "preset name"
-CMD_SET_INPUT_NAME: Final = "set input name"
-CMD_SET_OUTPUT_NAME: Final = "set output name"
-CMD_SET_BAUDRATE: Final = "set baudrate"
-CMD_SET_LCD_ON_TIME: Final = "set lcd on time"
-
-# The web UI caps port names at 32 characters and preset names at 49 bytes.
-MAX_PORT_NAME: Final = 32
-MAX_PRESET_NAME: Final = 49
-
-# CEC targets. "port" is a mask over all ports, not a port number, and it is
-# passed per command: it does not disturb the selection stored by
-# "set cec index".
-CEC_OBJECT_INPUT: Final = 0
-CEC_OBJECT_OUTPUT: Final = 1
-
-# Output CEC command ids. Inputs use a *different* numbering for the same
-# actions (1 = on, 2 = off), so do not reuse these for CEC_OBJECT_INPUT.
-CEC_OUTPUT_POWER_ON: Final = 0
-CEC_OUTPUT_POWER_OFF: Final = 1
-CEC_OUTPUT_MUTE: Final = 2
-CEC_OUTPUT_VOLUME_DOWN: Final = 3
-CEC_OUTPUT_VOLUME_UP: Final = 4
-
-# Displays accept only these. The web UI hides the rest and refuses to send
-# anything above 6 to an output.
-CEC_OUTPUT_COMMANDS: Final[dict[str, int]] = {
-    "power_on": CEC_OUTPUT_POWER_ON,
-    "power_off": CEC_OUTPUT_POWER_OFF,
-    "mute": CEC_OUTPUT_MUTE,
-    "volume_down": CEC_OUTPUT_VOLUME_DOWN,
-    "volume_up": CEC_OUTPUT_VOLUME_UP,
-    "source": 5,
-}
-
-# Source devices get the full remote. Note power is 1/2 here where an output
-# uses 0/1 for the same two actions.
-CEC_INPUT_COMMANDS: Final[dict[str, int]] = {
-    "power_on": 1,
-    "power_off": 2,
-    "up": 3,
-    "left": 4,
-    "enter": 5,
-    "right": 6,
-    "menu": 7,
-    "down": 8,
-    "back": 9,
-    "previous": 10,
-    "play": 11,
-    "next": 12,
-    "rewind": 13,
-    "pause": 14,
-    "fast_forward": 15,
-    "stop": 16,
-    "mute": 17,
-    "volume_down": 18,
-    "volume_up": 19,
-}
-
-# Firmware value -> option key. Labels live in the translation files.
-HDCP_MODES: Final[dict[int, str]] = {
-    1: "hdcp_1_4",
-    2: "hdcp_2_2",
-    3: "follow_sink",
-    4: "follow_source",
-    5: "off",
-}
-# EDID profiles the firmware accepts, lifted from the web UI. Ids 37-39 are
-# the user-uploaded slots and 40+ copy the EDID from an output.
-EDID_PROFILES: Final[dict[int, str]] = {
-    1: "1080P,2.0CH",
-    2: "1080P,5.1CH",
-    3: "1080P,7.1CH",
-    4: "4K30,2.0CH",
-    5: "4K30,5.1CH",
-    6: "4K30,7.1CH",
-    7: "4K60(420),2.0CH",
-    8: "4K60(420),5.1CH",
-    9: "4K60(420),7.1CH",
-    10: "4K60(444),2.0CH",
-    11: "4K60(444),5.1CH",
-    12: "4K60(444),7.1CH",
-    13: "1080P_HDR,2.0CH",
-    14: "1080P_HDR,5.1CH",
-    15: "1080P_HDR,7.1CH",
-    16: "4K30_HDR,2.0CH",
-    17: "4K30_HDR,5.1CH",
-    18: "4K30_HDR,7.1CH",
-    19: "4K60(420)_HDR,2.0CH",
-    20: "4K60(420)_HDR,5.1CH",
-    21: "4K60(420)_HDR,7.1CH",
-    22: "4K60(444)_HDR,2.0CH",
-    23: "4K60(444)_HDR,5.1CH",
-    24: "4K60(444)_HDR,7.1CH",
-    25: "4K120(420)_HDR,2.0CH",
-    26: "4K120(420)_HDR,5.1CH",
-    27: "4K120(420)_HDR,7.1CH",
-    28: "4K120(444)_HDR,2.0CH",
-    29: "4K120(444)_HDR,5.1CH",
-    30: "4K120(444)_HDR,7.1CH",
-    31: "FRL10G_8K_HDR,2.0CH",
-    32: "FRL10G_8K_HDR,5.1CH",
-    33: "FRL10G_8K_HDR,7.1CH",
-    34: "FRL12G_8K_HDR,2.0CH",
-    35: "FRL12G_8K_HDR,5.1CH",
-    36: "FRL12G_8K_HDR,7.1CH",
-    37: "User1_EDID",
-    38: "User2_EDID",
-    39: "User3_EDID",
-    40: "COPY_FROM_OUTPUT_1",
-    41: "COPY_FROM_OUTPUT_2",
-    42: "COPY_FROM_OUTPUT_3",
-    43: "COPY_FROM_OUTPUT_4",
-    44: "COPY_FROM_OUTPUT_5",
-    45: "COPY_FROM_OUTPUT_6",
-    46: "COPY_FROM_OUTPUT_7",
-    47: "COPY_FROM_OUTPUT_8",
-}
-
-# How the de-embedded audio outputs are driven. In the bind modes the audio
-# follows a video port; only in matrix mode is it routed independently.
-EXT_AUDIO_MODES: Final[dict[int, str]] = {
-    0: "bind_to_input",
-    1: "bind_to_output",
-    2: "audio_matrix",
-}
-EXT_AUDIO_MODE_MATRIX: Final = 2
-
-# RS-232 rate for the serial control port. Ids start at 1, not 0.
-BAUD_RATES: Final[dict[int, str]] = {
-    1: "4800",
-    2: "9600",
-    3: "19200",
-    4: "38400",
-    5: "57600",
-    6: "115200",
-}
-
-# Front panel backlight timeout. Reported as "mode" in get system status,
-# which is not obvious from the field name.
-LCD_ON_TIMES: Final[dict[int, str]] = {
-    0: "always_on",
-    1: "5_seconds",
-    2: "10_seconds",
-    3: "30_seconds",
-    4: "1_minute",
-    5: "5_minutes",
-    6: "10_minutes",
-}
-
-# Note the gap: the firmware has no scaler mode 2.
-SCALER_MODES: Final[dict[int, str]] = {
-    0: "bypass",
-    1: "downscale_4k_to_1080p",
-    3: "auto",
-}
 
 
 class _ResponseLike(Protocol):
@@ -262,91 +111,6 @@ class MatrixSession(Protocol):
         self, url: str, *, json: Any, timeout: aiohttp.ClientTimeout
     ) -> _ResponseContext:
         """POST a JSON body and return the response context."""
-
-
-class MatrixError(Exception):
-    """Base error for all matrix client failures."""
-
-
-class MatrixConnectionError(MatrixError):
-    """The matrix could not be reached."""
-
-
-class MatrixResponseError(MatrixError):
-    """The matrix replied with something we cannot parse or did not expect."""
-
-
-class MatrixAuthError(MatrixError):
-    """The matrix rejected the supplied credentials."""
-
-
-@dataclass(frozen=True, slots=True)
-class MatrixInfo:
-    """Identity of the matrix, read once during setup."""
-
-    model: str
-    hostname: str
-    mac_address: str
-    firmware: str
-
-
-@dataclass(slots=True)
-class MatrixState:
-    """Mutable state of the matrix, refreshed on every poll."""
-
-    power: bool
-    # Index is the zero-based output, value is the one-based input feeding it.
-    routes: list[int] = field(default_factory=list)
-    input_names: list[str] = field(default_factory=list)
-    output_names: list[str] = field(default_factory=list)
-    preset_names: list[str] = field(default_factory=list)
-    # A source is detected on this input / a sink is detected on this output.
-    input_active: list[bool] = field(default_factory=list)
-    output_connected: list[bool] = field(default_factory=list)
-    # Output stream enabled, and output audio muted.
-    output_enabled: list[bool] = field(default_factory=list)
-    audio_muted: list[bool] = field(default_factory=list)
-    # Raw per-output mode values; see HDCP_MODES and SCALER_MODES.
-    hdcp_modes: list[int] = field(default_factory=list)
-    scaler_modes: list[int] = field(default_factory=list)
-    # ARC on the output, and the EDID profile id on each input.
-    arc_enabled: list[bool] = field(default_factory=list)
-    input_edids: list[int] = field(default_factory=list)
-    # De-embedded audio: mode, per-output source, per-output enable.
-    ext_audio_mode: int = 0
-    ext_audio_routes: list[int] = field(default_factory=list)
-    ext_audio_enabled: list[bool] = field(default_factory=list)
-    ext_audio_output_names: list[str] = field(default_factory=list)
-    # Front panel state.
-    panel_locked: bool = False
-    beep_enabled: bool = False
-    baud_rate: int = 0
-    lcd_on_time: int = 0
-
-    def names_for(self, kind: str) -> list[str]:
-        """Return the device's names for a port kind.
-
-        The three name lists are addressed the same way by entities and by
-        renaming, so the mapping lives here rather than in each caller.
-        """
-        return {
-            "input": self.input_names,
-            "output": self.output_names,
-            "preset": self.preset_names,
-            # The de-embedded audio outputs carry their own names, which the
-            # firmware reports separately from the video outputs.
-            "ext_audio": self.ext_audio_output_names,
-        }[kind]
-
-    @property
-    def input_count(self) -> int:
-        """Number of physical inputs."""
-        return len(self.input_names)
-
-    @property
-    def output_count(self) -> int:
-        """Number of physical outputs."""
-        return len(self.output_names)
 
 
 class HdcvtMatrixClient:
