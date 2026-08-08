@@ -7,6 +7,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import HdcvtMatrixConfigEntry
 from .api import (
@@ -184,7 +185,7 @@ class HdcvtMatrixOutputSelect(HdcvtMatrixPortEntity, SelectEntity):
         await self.coordinator.async_set_route(self._port, source)
 
 
-class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, SelectEntity):
+class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, RestoreEntity, SelectEntity):
     """Recall one of the matrix's stored routing presets."""
 
     _attr_translation_key = "preset"
@@ -192,6 +193,25 @@ class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, SelectEntity):
     def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
         """Initialise the preset select."""
         super().__init__(coordinator, "preset")
+
+    async def async_added_to_hass(self) -> None:
+        """Carry the last applied preset across a restart.
+
+        The firmware cannot report which preset is active, so our own record is
+        the only one there is, and it lives in memory. Without restoring it the
+        select read unknown after every Home Assistant restart, integration
+        reload, and options change.
+        """
+        await super().async_added_to_hass()
+        if self.coordinator.active_preset is not None:
+            return
+
+        last = await self.async_get_last_state()
+        if last is None:
+            return
+        names = self.coordinator.data.preset_names
+        if last.state in names:
+            self.coordinator.active_preset = names.index(last.state) + 1
 
     @property
     def options(self) -> list[str]:

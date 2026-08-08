@@ -15,9 +15,10 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import mock_restore_cache
 
 from custom_components.hdcvt_matrix.const import DOMAIN
 
@@ -476,3 +477,29 @@ async def test_lcd_timeout_reads_the_mode_field(
 
     calls = [r for r in session.requests if r["comhead"] == "set lcd on time"]
     assert calls == [{"comhead": "set lcd on time", "lcd on time": 0}]
+
+
+async def test_preset_survives_a_restart(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The firmware cannot report the active preset, so ours has to persist.
+
+    It used to read unknown after every restart, reload and options change,
+    since the only record of it lived in memory.
+    """
+    mock_restore_cache(hass, (State("select.hdp_mxc88a_preset", "Laptop"),))
+
+    await setup_integration(make_session())
+
+    assert get_state(hass, entity_id(hass)).state == "Laptop"
+
+
+async def test_a_stale_restored_preset_is_ignored(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """A preset renamed on the device must not restore to a name it no longer has."""
+    mock_restore_cache(hass, (State("select.hdp_mxc88a_preset", "Renamed Since"),))
+
+    await setup_integration(make_session())
+
+    assert get_state(hass, entity_id(hass)).state == STATE_UNKNOWN
