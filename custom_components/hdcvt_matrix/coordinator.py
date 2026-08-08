@@ -64,10 +64,11 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         except MatrixError as err:
             raise UpdateFailed(str(err)) from err
 
-        # Standby stops the matrix reporting its port tables. Carry the last
-        # known ones forward, so switching it off changes the power switch and
-        # nothing else. Otherwise every entity blanks at once and floods the
-        # history with state changes that say nothing.
+        # Defensive, and not reached on the reference HDP-MXC88A: probing it
+        # in standby showed every table still reported, with only `power`
+        # flipping to 0. Kept because this firmware is resold under several
+        # brands and a variant that blanks its tables would otherwise make
+        # every entity go unknown at once on each power change.
         if not state.output_names and self.data is not None:
             return replace(self.data, power=state.power)
         return state

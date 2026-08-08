@@ -15,7 +15,7 @@ from custom_components.hdcvt_matrix.api import (
     MatrixResponseError,
 )
 
-from .conftest import FakeResponse, make_session
+from .conftest import DEVICE_RESPONSES, FakeResponse, make_session
 
 HOST = "192.168.10.60"
 
@@ -231,7 +231,11 @@ async def test_writes_are_never_retried() -> None:
 
 
 async def test_standby_reply_is_reported_as_off() -> None:
-    """A matrix in standby stops reporting its port tables."""
+    """A variant that blanks its tables in standby still reports as off.
+
+    The reference HDP-MXC88A does not do this -- see the test below -- but
+    the branch exists for rebadged firmware that might.
+    """
     client = HdcvtMatrixClient(
         HOST,
         make_session(
@@ -243,3 +247,27 @@ async def test_standby_reply_is_reported_as_off() -> None:
 
     assert state.power is False
     assert state.output_names == []
+
+
+async def test_standby_still_reports_everything() -> None:
+    """Observed on an HDP-MXC88A: standby flips `power` and nothing else.
+
+    Probed on hardware rather than assumed. The port tables, routing and
+    detection all keep reporting, so entities hold their values and only the
+    power switch moves.
+    """
+    session = make_session(
+        overrides={
+            "get video status": {
+                **DEVICE_RESPONSES["get video status"],
+                "power": 0,
+            }
+        }
+    )
+
+    state = await HdcvtMatrixClient(HOST, session).async_get_state()
+
+    assert state.power is False
+    assert state.output_count == 8
+    assert state.routes == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert state.input_names[0] == "Input1"

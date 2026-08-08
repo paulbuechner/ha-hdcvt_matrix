@@ -254,10 +254,9 @@ class HdcvtMatrixClient:
                 raise MatrixResponseError(
                     f"{self._host} reported no port names; cannot size the matrix"
                 )
-            # In standby the IP module stays reachable but the matrix itself may
-            # report nothing useful. Surface that as "off" rather than failing
-            # the update, so the power control stays available to switch it back
-            # on.
+            # Not reached on the reference HDP-MXC88A, which reports its full
+            # tables in standby. Kept for variants that do not: surfacing "off"
+            # beats failing the update and taking every entity with it.
             return MatrixState(power=False)
 
         outputs = await self._async_read({KEY_COMHEAD: CMD_GET_OUTPUT_STATUS})

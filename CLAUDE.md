@@ -57,6 +57,13 @@ JSON body keyed by `comhead`. Four traps, each of which has already cost time:
 
 Ports are one-based in every payload. `0` usually means "all ports".
 
+Standby, measured on the reference unit rather than assumed:
+
+- Every status command keeps answering in full; only `power` flips to 0.
+- Writes are accepted and take effect, so routing can be changed while off.
+- `set poweronoff` back on returns a usable device in about two seconds,
+  not the ten the web UI's wait dialog implies.
+
 ## Probing the real device
 
 Read commands are safe and unauthenticated:

@@ -88,7 +88,7 @@ Unticking a group **deletes** its entities rather than leaving them behind as un
 
 Home Assistant groups what remains on the device page the same way the matrix's own web UI does: routing under *Controls*, per-port and front-panel settings under *Configuration*, and signal detection under *Diagnostic*.
 
-Standby is **not** treated as unavailable. The matrix is still reachable and still remembers its routing, so switching it off changes the power switch and nothing else.
+Standby is **not** treated as unavailable. Measured on the reference unit: every status command keeps answering in full and only `power` flips, so switching the matrix off changes the power switch and nothing else. Writes are accepted while off and take effect, so routing can be changed in standby; it wakes in about two seconds.
 
 The preset select reads `unknown` until you pick one. That is deliberate: the firmware reports preset *names* but never which one is active, and there is no command to read a preset's stored routing back, so any other value would be a guess. Routing an individual output after recalling a preset likewise leaves the select showing the preset you last chose.
 
