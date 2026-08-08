@@ -104,7 +104,7 @@
     },
     "switch": {
       "power": {
-        "name": "Strom"
+        "name": "Power"
       },
       "panel_lock": {
         "name": "Tastensperre"
