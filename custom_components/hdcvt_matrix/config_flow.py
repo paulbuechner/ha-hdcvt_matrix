@@ -26,6 +26,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -40,6 +43,7 @@ from .api import (
     MatrixInfo,
 )
 from .const import (
+    CONF_FEATURES,
     CONF_USE_DEFAULT_CREDENTIALS,
     DEFAULT_PASSWORD,
     DEFAULT_SCAN_INTERVAL,
@@ -49,6 +53,7 @@ from .const import (
     ERROR_INVALID_AUTH,
     ERROR_UNKNOWN,
     ERROR_UNSUPPORTED_DEVICE,
+    FEATURES,
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
 )
@@ -105,6 +110,16 @@ USER_SCHEMA = vol.Schema(
 
 OPTIONS_SCHEMA = vol.Schema(
     {
+        # Nothing outside core routing is created until it is picked here, so
+        # a default install stays at ten entities rather than ninety.
+        vol.Optional(CONF_FEATURES, default=[]): SelectSelector(
+            SelectSelectorConfig(
+                options=FEATURES,
+                multiple=True,
+                mode=SelectSelectorMode.LIST,
+                translation_key="features",
+            )
+        ),
         vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): NumberSelector(
             NumberSelectorConfig(
                 min=MIN_SCAN_INTERVAL,
@@ -127,7 +142,10 @@ class HdcvtMatrixOptionsFlow(OptionsFlowWithReload):
         """Show and store the options."""
         if user_input is not None:
             return self.async_create_entry(
-                data={CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL])}
+                data={
+                    CONF_FEATURES: user_input.get(CONF_FEATURES, []),
+                    CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+                }
             )
 
         return self.async_show_form(

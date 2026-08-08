@@ -9,8 +9,10 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
 from .api import MAX_PORT_NAME, MAX_PRESET_NAME
+from .const import FEATURE_RENAMING
 from .coordinator import HdcvtMatrixCoordinator
 from .entity import HdcvtMatrixPortEntity
+from .features import async_prune, enabled
 
 PARALLEL_UPDATES = 0
 
@@ -30,11 +32,15 @@ async def async_setup_entry(  # NOSONAR
         "output": data.output_count,
         "preset": len(data.preset_names),
     }
-    async_add_entities(
-        HdcvtMatrixName(coordinator, kind, index)
-        for kind, count in counts.items()
-        for index in range(1, count + 1)
-    )
+    entities: list[TextEntity] = []
+    if enabled(entry, FEATURE_RENAMING):
+        entities = [
+            HdcvtMatrixName(coordinator, kind, index)
+            for kind, count in counts.items()
+            for index in range(1, count + 1)
+        ]
+    async_prune(hass, entry, "text", (e.unique_id or "" for e in entities))
+    async_add_entities(entities)
 
 
 class HdcvtMatrixName(HdcvtMatrixPortEntity, TextEntity):
@@ -45,7 +51,6 @@ class HdcvtMatrixName(HdcvtMatrixPortEntity, TextEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self, coordinator: HdcvtMatrixCoordinator, kind: str, index: int

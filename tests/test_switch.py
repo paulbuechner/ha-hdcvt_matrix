@@ -12,7 +12,6 @@ from homeassistant.const import (
     SERVICE_TURN_ON,
     STATE_OFF,
     STATE_ON,
-    STATE_UNAVAILABLE,
     EntityCategory,
 )
 from homeassistant.core import HomeAssistant
@@ -114,13 +113,39 @@ async def test_standby_keeps_the_switch_usable(
     assert get_state(hass, switch_id(hass)).state == STATE_OFF
 
 
-async def test_standby_makes_the_preset_select_unavailable(
+async def test_standby_leaves_other_entities_alone(
     hass: HomeAssistant, setup_integration: SetupIntegration
 ) -> None:
-    """Recalling a preset is meaningless while the matrix is off."""
-    await setup_integration(make_session(overrides=STANDBY))
+    """Switching the matrix off must change the power switch and nothing else.
 
-    assert get_state(hass, select_id(hass)).state == STATE_UNAVAILABLE
+    It used to mark every entity unavailable at once, which flooded the
+    history with roughly ninety state changes that carried no information.
+    """
+    await setup_integration(make_session())
+    before = {
+        state.entity_id: state.state
+        for state in hass.states.async_all()
+        if state.entity_id != switch_id(hass)
+    }
+
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_OFF,
+        {ATTR_ENTITY_ID: switch_id(hass)},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert get_state(hass, switch_id(hass)).state == STATE_OFF
+    after = {
+        state.entity_id: state.state
+        for state in hass.states.async_all()
+        if state.entity_id != switch_id(hass)
+    }
+    # Equality is the guard: not one other entity moved. A few are unavailable
+    # either way for an unrelated reason -- the audio routing selects only
+    # apply in audio-matrix mode -- so they are not asserted on here.
+    assert after == before
 
 
 async def test_device_refusal_surfaces(

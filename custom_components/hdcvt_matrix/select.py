@@ -18,8 +18,15 @@ from .api import (
     LCD_ON_TIMES,
     SCALER_MODES,
 )
+from .const import (
+    FEATURE_EDID,
+    FEATURE_EXT_AUDIO,
+    FEATURE_SYSTEM,
+    FEATURE_VIDEO_SETTINGS,
+)
 from .coordinator import HdcvtMatrixCoordinator
 from .entity import HdcvtMatrixEntity, HdcvtMatrixPortEntity
+from .features import async_prune, enabled
 
 # All writes go through the coordinator, which serialises them.
 PARALLEL_UPDATES = 0
@@ -32,25 +39,41 @@ async def async_setup_entry(  # NOSONAR
     entry: HdcvtMatrixConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the preset select and one select per output."""
+    """Set up routing, presets and whichever optional selects are switched on."""
     coordinator = entry.runtime_data
+    data = coordinator.data
+
+    # Core: routing and preset recall, always present.
     entities: list[SelectEntity] = [HdcvtMatrixPresetSelect(coordinator)]
     # Port count comes from the device, so a 4x4 gets four of these.
-    for output in range(1, coordinator.data.output_count + 1):
-        entities.append(HdcvtMatrixOutputSelect(coordinator, output))
-        entities.append(HdcvtMatrixHdcpSelect(coordinator, output))
-        entities.append(HdcvtMatrixScalerSelect(coordinator, output))
     entities.extend(
-        HdcvtMatrixEdidSelect(coordinator, source)
-        for source in range(1, coordinator.data.input_count + 1)
+        HdcvtMatrixOutputSelect(coordinator, output)
+        for output in range(1, data.output_count + 1)
     )
-    entities.append(HdcvtMatrixExtAudioModeSelect(coordinator))
-    entities.append(HdcvtMatrixBaudRateSelect(coordinator))
-    entities.append(HdcvtMatrixLcdOnTimeSelect(coordinator))
-    entities.extend(
-        HdcvtMatrixExtAudioSelect(coordinator, output)
-        for output in range(1, len(coordinator.data.ext_audio_output_names) + 1)
-    )
+
+    if enabled(entry, FEATURE_VIDEO_SETTINGS):
+        for output in range(1, data.output_count + 1):
+            entities.append(HdcvtMatrixHdcpSelect(coordinator, output))
+            entities.append(HdcvtMatrixScalerSelect(coordinator, output))
+
+    if enabled(entry, FEATURE_EDID):
+        entities.extend(
+            HdcvtMatrixEdidSelect(coordinator, source)
+            for source in range(1, data.input_count + 1)
+        )
+
+    if enabled(entry, FEATURE_EXT_AUDIO):
+        entities.append(HdcvtMatrixExtAudioModeSelect(coordinator))
+        entities.extend(
+            HdcvtMatrixExtAudioSelect(coordinator, output)
+            for output in range(1, len(data.ext_audio_output_names) + 1)
+        )
+
+    if enabled(entry, FEATURE_SYSTEM):
+        entities.append(HdcvtMatrixBaudRateSelect(coordinator))
+        entities.append(HdcvtMatrixLcdOnTimeSelect(coordinator))
+
+    async_prune(hass, entry, "select", (e.unique_id or "" for e in entities))
     async_add_entities(entities)
 
 
@@ -62,7 +85,6 @@ class _OutputModeSelect(HdcvtMatrixPortEntity, SelectEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _modes: dict[int, str]
 
     def __init__(
@@ -213,7 +235,6 @@ class HdcvtMatrixEdidSelect(HdcvtMatrixPortEntity, SelectEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "input_edid"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, source: int) -> None:
@@ -240,7 +261,6 @@ class HdcvtMatrixExtAudioModeSelect(HdcvtMatrixEntity, SelectEntity):
     """How the de-embedded audio outputs are driven."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "ext_audio_mode"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
@@ -270,7 +290,6 @@ class HdcvtMatrixExtAudioSelect(HdcvtMatrixPortEntity, SelectEntity):
     """
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "ext_audio_output"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, output: int) -> None:
@@ -316,7 +335,6 @@ class _SystemSelect(HdcvtMatrixEntity, SelectEntity):
     """A select backed by one scalar in get system status."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _values: dict[int, str]
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, key: str) -> None:

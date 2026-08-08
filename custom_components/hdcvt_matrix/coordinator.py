@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -57,11 +58,19 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
     async def _async_update_data(self) -> MatrixState:
         """Fetch the current matrix state."""
         try:
-            return await self.client.async_get_state()
+            state = await self.client.async_get_state()
         except MatrixAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except MatrixError as err:
             raise UpdateFailed(str(err)) from err
+
+        # Standby stops the matrix reporting its port tables. Carry the last
+        # known ones forward, so switching it off changes the power switch and
+        # nothing else. Otherwise every entity blanks at once and floods the
+        # history with state changes that say nothing.
+        if not state.output_names and self.data is not None:
+            return replace(self.data, power=state.power)
+        return state
 
     async def _async_write(
         self, action: Awaitable[None], describe: str, apply: Callable[[], None] | None

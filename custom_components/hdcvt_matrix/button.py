@@ -15,8 +15,10 @@ from .api import (
     CEC_OUTPUT_VOLUME_DOWN,
     CEC_OUTPUT_VOLUME_UP,
 )
+from .const import FEATURE_CEC, FEATURE_PRESET_MANAGEMENT, FEATURE_SYSTEM
 from .coordinator import HdcvtMatrixCoordinator
 from .entity import HdcvtMatrixEntity, HdcvtMatrixPortEntity
+from .features import async_prune, enabled
 
 PARALLEL_UPDATES = 0
 
@@ -30,19 +32,30 @@ async def async_setup_entry(  # NOSONAR
 ) -> None:
     """Set up reboot, preset save buttons and CEC display power per output."""
     coordinator = entry.runtime_data
-    entities: list[ButtonEntity] = [HdcvtMatrixReboot(coordinator)]
-    for index in range(1, len(coordinator.data.preset_names) + 1):
-        entities.append(HdcvtMatrixSavePreset(coordinator, index))
-        entities.append(HdcvtMatrixClearPreset(coordinator, index))
-    for output in range(1, coordinator.data.output_count + 1):
-        entities.append(HdcvtMatrixDisplayPower(coordinator, output, on=True))
-        entities.append(HdcvtMatrixDisplayPower(coordinator, output, on=False))
-        for key, command in (
-            ("volume_up", CEC_OUTPUT_VOLUME_UP),
-            ("volume_down", CEC_OUTPUT_VOLUME_DOWN),
-            ("mute", CEC_OUTPUT_MUTE),
-        ):
-            entities.append(HdcvtMatrixDisplayCec(coordinator, output, key, command))
+    entities: list[ButtonEntity] = []
+
+    if enabled(entry, FEATURE_SYSTEM):
+        entities.append(HdcvtMatrixReboot(coordinator))
+
+    if enabled(entry, FEATURE_PRESET_MANAGEMENT):
+        for index in range(1, len(coordinator.data.preset_names) + 1):
+            entities.append(HdcvtMatrixSavePreset(coordinator, index))
+            entities.append(HdcvtMatrixClearPreset(coordinator, index))
+
+    if enabled(entry, FEATURE_CEC):
+        for output in range(1, coordinator.data.output_count + 1):
+            entities.append(HdcvtMatrixDisplayPower(coordinator, output, on=True))
+            entities.append(HdcvtMatrixDisplayPower(coordinator, output, on=False))
+            for key, command in (
+                ("volume_up", CEC_OUTPUT_VOLUME_UP),
+                ("volume_down", CEC_OUTPUT_VOLUME_DOWN),
+                ("mute", CEC_OUTPUT_MUTE),
+            ):
+                entities.append(
+                    HdcvtMatrixDisplayCec(coordinator, output, key, command)
+                )
+
+    async_prune(hass, entry, "button", (e.unique_id or "" for e in entities))
     async_add_entities(entities)
 
 
@@ -53,8 +66,6 @@ class HdcvtMatrixDisplayPower(HdcvtMatrixPortEntity, ButtonEntity):
     send the command but cannot report whether the display obeyed, or what
     state it is in.
     """
-
-    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self, coordinator: HdcvtMatrixCoordinator, output: int, *, on: bool
@@ -76,7 +87,6 @@ class HdcvtMatrixSavePreset(HdcvtMatrixPortEntity, ButtonEntity):
     """Overwrite one preset with the routing currently in effect."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "save_preset"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, index: int) -> None:
@@ -97,7 +107,6 @@ class HdcvtMatrixReboot(HdcvtMatrixEntity, ButtonEntity):
 
     _attr_device_class = ButtonDeviceClass.RESTART
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "reboot"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
@@ -113,7 +122,6 @@ class HdcvtMatrixClearPreset(HdcvtMatrixPortEntity, ButtonEntity):
     """Empty one preset slot."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "clear_preset"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, index: int) -> None:
@@ -127,8 +135,6 @@ class HdcvtMatrixClearPreset(HdcvtMatrixPortEntity, ButtonEntity):
 
 class HdcvtMatrixDisplayCec(HdcvtMatrixPortEntity, ButtonEntity):
     """Send a non-power CEC command to one output's display."""
-
-    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,

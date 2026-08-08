@@ -195,11 +195,13 @@
   "options": {
     "step": {
       "init": {
-        "title": "Abfrageintervall",
+        "title": "Optionen",
         "data": {
+          "features": "Optionale Funktionen",
           "scan_interval": "Sekunden zwischen Abfragen"
         },
         "data_description": {
+          "features": "Es wird nur angelegt, was hier ausgewählt ist. Standard sind zehn Entitäten; mit allem rund neunzig.",
           "scan_interval": "Wie oft die Matrix neu gelesen wird. Ihr Webdienst verarbeitet nur eine Anfrage gleichzeitig, kürzer ist also nicht immer besser."
         }
       }
@@ -275,6 +277,19 @@
         "mute": "Stumm",
         "volume_down": "Leiser",
         "volume_up": "Lauter"
+      }
+    },
+    "features": {
+      "options": {
+        "video_settings": "HDCP und Skalierer je Ausgang",
+        "edid": "EDID je Eingang",
+        "output_switches": "Stream, Ton stumm und ARC je Ausgang",
+        "signal_sensors": "Signal- und Anzeigeerkennung",
+        "preset_management": "Presets speichern und leeren",
+        "cec": "CEC-Anzeigesteuerung",
+        "ext_audio": "Ausgekoppeltes Audio",
+        "system": "Frontpanel, Seriell und Neustart",
+        "renaming": "Ein-, Ausgänge und Presets umbenennen"
       }
     }
   }

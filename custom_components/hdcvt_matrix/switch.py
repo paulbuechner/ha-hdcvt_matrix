@@ -10,8 +10,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
+from .const import FEATURE_EXT_AUDIO, FEATURE_OUTPUT_SWITCHES, FEATURE_SYSTEM
 from .coordinator import HdcvtMatrixCoordinator
 from .entity import HdcvtMatrixEntity, HdcvtMatrixPortEntity
+from .features import async_prune, enabled
 
 # All writes go through the coordinator, which serialises them.
 PARALLEL_UPDATES = 0
@@ -24,21 +26,30 @@ async def async_setup_entry(  # NOSONAR
     entry: HdcvtMatrixConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up power and panel switches, plus stream and mute per output."""
+    """Set up power, plus whichever optional switches are switched on."""
     coordinator = entry.runtime_data
-    entities: list[SwitchEntity] = [
-        HdcvtMatrixPowerSwitch(coordinator),
-        HdcvtMatrixPanelLockSwitch(coordinator),
-        HdcvtMatrixBeepSwitch(coordinator),
-    ]
-    for output in range(1, coordinator.data.output_count + 1):
-        entities.append(HdcvtMatrixOutputSwitch(coordinator, output))
-        entities.append(HdcvtMatrixMuteSwitch(coordinator, output))
-        entities.append(HdcvtMatrixArcSwitch(coordinator, output))
-    entities.extend(
-        HdcvtMatrixExtAudioSwitch(coordinator, output)
-        for output in range(1, len(coordinator.data.ext_audio_output_names) + 1)
-    )
+    data = coordinator.data
+
+    # Core: the one control nobody would want to opt into.
+    entities: list[SwitchEntity] = [HdcvtMatrixPowerSwitch(coordinator)]
+
+    if enabled(entry, FEATURE_SYSTEM):
+        entities.append(HdcvtMatrixPanelLockSwitch(coordinator))
+        entities.append(HdcvtMatrixBeepSwitch(coordinator))
+
+    if enabled(entry, FEATURE_OUTPUT_SWITCHES):
+        for output in range(1, data.output_count + 1):
+            entities.append(HdcvtMatrixOutputSwitch(coordinator, output))
+            entities.append(HdcvtMatrixMuteSwitch(coordinator, output))
+            entities.append(HdcvtMatrixArcSwitch(coordinator, output))
+
+    if enabled(entry, FEATURE_EXT_AUDIO):
+        entities.extend(
+            HdcvtMatrixExtAudioSwitch(coordinator, output)
+            for output in range(1, len(data.ext_audio_output_names) + 1)
+        )
+
+    async_prune(hass, entry, "switch", (e.unique_id or "" for e in entities))
     async_add_entities(entities)
 
 
@@ -46,7 +57,6 @@ class HdcvtMatrixPanelLockSwitch(HdcvtMatrixEntity, SwitchEntity):
     """Lock the physical buttons on the front of the matrix."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "panel_lock"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
@@ -71,7 +81,6 @@ class HdcvtMatrixBeepSwitch(HdcvtMatrixEntity, SwitchEntity):
     """The beep the matrix makes on a front panel press."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "beep"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
@@ -95,7 +104,6 @@ class HdcvtMatrixBeepSwitch(HdcvtMatrixEntity, SwitchEntity):
 class _OutputSwitch(HdcvtMatrixPortEntity, SwitchEntity):
     """Shared plumbing for the per-output switches."""
 
-    _attr_entity_registry_enabled_default = False
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
@@ -154,9 +162,6 @@ class HdcvtMatrixMuteSwitch(_OutputSwitch):
 class HdcvtMatrixPowerSwitch(HdcvtMatrixEntity, SwitchEntity):
     """Switch the matrix between on and standby."""
 
-    # The one control that has to work while the matrix is asleep.
-    _requires_power = False
-
     _attr_translation_key = "power"
     _attr_device_class = SwitchDeviceClass.SWITCH
 
@@ -205,7 +210,6 @@ class HdcvtMatrixExtAudioSwitch(HdcvtMatrixPortEntity, SwitchEntity):
     """Enable one de-embedded audio output."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "ext_audio_out"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, output: int) -> None:

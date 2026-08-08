@@ -11,8 +11,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
+from .const import FEATURE_SIGNAL_SENSORS
 from .coordinator import HdcvtMatrixCoordinator
 from .entity import HdcvtMatrixPortEntity
+from .features import async_prune, enabled
 
 PARALLEL_UPDATES = 0
 
@@ -26,14 +28,17 @@ async def async_setup_entry(  # NOSONAR
 ) -> None:
     """Set up a signal sensor per input and a sink sensor per output."""
     coordinator = entry.runtime_data
-    entities: list[BinarySensorEntity] = [
-        HdcvtMatrixInputSignal(coordinator, port)
-        for port in range(1, coordinator.data.input_count + 1)
-    ]
-    entities.extend(
-        HdcvtMatrixOutputSink(coordinator, port)
-        for port in range(1, coordinator.data.output_count + 1)
-    )
+    entities: list[BinarySensorEntity] = []
+    if enabled(entry, FEATURE_SIGNAL_SENSORS):
+        entities.extend(
+            HdcvtMatrixInputSignal(coordinator, port)
+            for port in range(1, coordinator.data.input_count + 1)
+        )
+        entities.extend(
+            HdcvtMatrixOutputSink(coordinator, port)
+            for port in range(1, coordinator.data.output_count + 1)
+        )
+    async_prune(hass, entry, "binary_sensor", (e.unique_id or "" for e in entities))
     async_add_entities(entities)
 
 
@@ -42,7 +47,6 @@ class HdcvtMatrixInputSignal(HdcvtMatrixPortEntity, BinarySensorEntity):
 
     _attr_device_class = BinarySensorDeviceClass.PLUG
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "input_signal"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, port: int) -> None:
@@ -60,7 +64,6 @@ class HdcvtMatrixOutputSink(HdcvtMatrixPortEntity, BinarySensorEntity):
 
     _attr_device_class = BinarySensorDeviceClass.PLUG
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "output_sink"
 
     def __init__(self, coordinator: HdcvtMatrixCoordinator, port: int) -> None:

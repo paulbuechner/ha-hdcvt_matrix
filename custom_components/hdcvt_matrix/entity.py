@@ -26,11 +26,6 @@ class HdcvtMatrixEntity(CoordinatorEntity[HdcvtMatrixCoordinator]):
 
     _attr_has_entity_name = True
 
-    # Nearly everything is meaningless while the matrix is in standby. The
-    # power switch is the exception, since it is how you leave standby, and
-    # the CEC buttons wake displays rather than depend on them.
-    _requires_power = True
-
     def __init__(self, coordinator: HdcvtMatrixCoordinator, key: str) -> None:
         """Initialise the entity and bind it to the matrix device."""
         super().__init__(coordinator)
@@ -46,12 +41,10 @@ class HdcvtMatrixEntity(CoordinatorEntity[HdcvtMatrixCoordinator]):
             configuration_url=f"http://{coordinator.client.host}",  # NOSONAR
         )
 
-    @property
-    def available(self) -> bool:
-        """Whether the matrix is reachable, and awake if this needs it."""
-        if not super().available:
-            return False
-        return self.coordinator.data.power or not self._requires_power
+    # Deliberately no availability override. A matrix in standby is still
+    # reachable and still remembers its routing, so entities keep their values
+    # and only the power switch changes. Marking them unavailable was both
+    # wrong and noisy: it flipped every entity at once on each power change.
 
 
 class HdcvtMatrixPortEntity(HdcvtMatrixEntity):

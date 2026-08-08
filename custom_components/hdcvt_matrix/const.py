@@ -16,6 +16,33 @@ DEFAULT_USERNAME: Final = "Admin"
 DEFAULT_PASSWORD: Final = "admin"  # noqa: S105
 CONF_USE_DEFAULT_CREDENTIALS: Final = "use_default_credentials"
 
+# Optional feature groups. An 8x8 can expose around ninety entities; creating
+# them all and leaving most disabled still clutters the entity list and the
+# registry, so nothing outside core routing exists until it is asked for.
+CONF_FEATURES: Final = "features"
+
+FEATURE_VIDEO_SETTINGS: Final = "video_settings"
+FEATURE_EDID: Final = "edid"
+FEATURE_OUTPUT_SWITCHES: Final = "output_switches"
+FEATURE_SIGNAL_SENSORS: Final = "signal_sensors"
+FEATURE_PRESET_MANAGEMENT: Final = "preset_management"
+FEATURE_CEC: Final = "cec"
+FEATURE_EXT_AUDIO: Final = "ext_audio"
+FEATURE_SYSTEM: Final = "system"
+FEATURE_RENAMING: Final = "renaming"
+
+FEATURES: Final[list[str]] = [
+    FEATURE_VIDEO_SETTINGS,
+    FEATURE_EDID,
+    FEATURE_OUTPUT_SWITCHES,
+    FEATURE_SIGNAL_SENSORS,
+    FEATURE_PRESET_MANAGEMENT,
+    FEATURE_CEC,
+    FEATURE_EXT_AUDIO,
+    FEATURE_SYSTEM,
+    FEATURE_RENAMING,
+]
+
 # Flow error and abort reasons. Named so a typo cannot silently drift away from
 # the matching key in strings.json.
 ERROR_CANNOT_CONNECT: Final = "cannot_connect"

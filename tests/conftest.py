@@ -15,7 +15,7 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, State
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.hdcvt_matrix.const import DOMAIN
+from custom_components.hdcvt_matrix.const import CONF_FEATURES, DOMAIN, FEATURES
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -25,7 +25,7 @@ UNIQUE_ID = "6c:df:fb:01:ab:cd"
 HTTP_BAD_REQUEST = 400
 
 # Signatures of the fixtures below, so tests taking them stay type-checked.
-type SetupIntegration = Callable[[FakeSession], Awaitable[FakeSession]]
+type SetupIntegration = Callable[..., Awaitable[FakeSession]]
 type PatchClientsession = Callable[[FakeSession], AbstractContextManager[FakeSession]]
 
 # Captured verbatim from an HDP-MXC88A on firmware V1.00.16 / web V2.00.21.
@@ -307,12 +307,18 @@ def patch_clientsession() -> PatchClientsession:
 def setup_integration(hass: HomeAssistant) -> SetupIntegration:
     """Set the integration up against a fake session, and hand that session back."""
 
-    async def _setup(session: FakeSession) -> FakeSession:
+    async def _setup(
+        session: FakeSession, features: list[str] | None = None
+    ) -> FakeSession:
         entry = MockConfigEntry(
             domain=DOMAIN,
             unique_id=UNIQUE_ID,
             title="HDP-MXC88A",
             data={CONF_HOST: HOST},
+            # Most tests exercise the optional entities, so switch every
+            # feature on by default. Pass features=[] for the untouched
+            # install, or a subset to check one group in isolation.
+            options={CONF_FEATURES: list(FEATURES) if features is None else features},
         )
         entry.add_to_hass(hass)
         # Patch only for setup; the client keeps the session it was handed, so

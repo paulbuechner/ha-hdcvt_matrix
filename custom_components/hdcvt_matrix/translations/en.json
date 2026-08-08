@@ -195,11 +195,13 @@
   "options": {
     "step": {
       "init": {
-        "title": "Polling",
+        "title": "Options",
         "data": {
+          "features": "Optional features",
           "scan_interval": "Seconds between polls"
         },
         "data_description": {
+          "features": "Only what you tick here is created. A default install adds ten entities; enabling everything adds around ninety.",
           "scan_interval": "How often to re-read the matrix. Its web backend handles one request at a time, so shorter is not always better."
         }
       }
@@ -275,6 +277,19 @@
         "mute": "Mute",
         "volume_down": "Volume down",
         "volume_up": "Volume up"
+      }
+    },
+    "features": {
+      "options": {
+        "video_settings": "Per-output HDCP and scaler",
+        "edid": "Per-input EDID",
+        "output_switches": "Per-output stream, audio mute and ARC",
+        "signal_sensors": "Signal and display detection",
+        "preset_management": "Preset save and clear buttons",
+        "cec": "CEC display control",
+        "ext_audio": "De-embedded audio",
+        "system": "Front panel, serial and reboot",
+        "renaming": "Rename inputs, outputs and presets"
       }
     }
   }

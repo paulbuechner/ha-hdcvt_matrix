@@ -228,3 +228,18 @@ async def test_writes_are_never_retried() -> None:
 
     writes = [r for r in session.requests if r["comhead"] == "video switch"]
     assert len(writes) == 1
+
+
+async def test_standby_reply_is_reported_as_off() -> None:
+    """A matrix in standby stops reporting its port tables."""
+    client = HdcvtMatrixClient(
+        HOST,
+        make_session(
+            overrides={"get video status": {"comhead": "get video status", "power": 0}}
+        ),
+    )
+
+    state = await client.async_get_state()
+
+    assert state.power is False
+    assert state.output_names == []

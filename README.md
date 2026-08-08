@@ -66,13 +66,29 @@ CEC is one-way here: the matrix sends the command but cannot report whether the 
 
 Port counts come from the device, so a 4×4 gets four routing selects and an 8×8 gets eight.
 
-### Only ten entities are enabled by default
+### Only core routing is created by default
 
-An 8×8 exposes around ninety entities. Adding them all would bury the handful anyone routinely uses, so a fresh install enables only **power, the eight routing selects, and preset recall**. Everything else is registered but disabled — enable what you want under *Settings → Devices & Services → HDCVT HDMI Matrix → entities*, filtering by **Disabled**.
+An 8×8 could expose around ninety entities. Rather than create them all and disable most, nothing outside **power, the eight routing selects and preset recall** exists at all until you ask for it.
 
-Home Assistant groups them on the device page the same way the matrix's own web UI does: routing under *Controls*, per-port and front-panel settings under *Configuration*, and signal detection under *Diagnostic*.
+To turn a feature group on: **Settings → Devices & Services → HDCVT HDMI Matrix → Configure**, then tick what you want under *Optional features*.
 
-Everything except Power goes unavailable while the matrix is in standby. Power never does — including when the matrix answers a status read with nothing useful, which would otherwise leave no way to switch it back on.
+| Feature | Adds |
+| --- | --- |
+| Per-output HDCP and scaler | 2 selects per output |
+| Per-input EDID | 1 select per input |
+| Per-output stream, audio mute and ARC | 3 switches per output |
+| Signal and display detection | 1 binary sensor per port |
+| Preset save and clear buttons | 2 buttons per preset |
+| CEC display control | 5 buttons per output |
+| De-embedded audio | mode select, plus a select and switch per audio output |
+| Front panel, serial and reboot | panel lock, beeper, baud rate, backlight timeout, reboot |
+| Rename inputs, outputs and presets | 1 text field per port and preset |
+
+Unticking a group **deletes** its entities rather than leaving them behind as unavailable ghosts, so any automations referencing them will break — that is the intended trade for a registry that matches what you actually use.
+
+Home Assistant groups what remains on the device page the same way the matrix's own web UI does: routing under *Controls*, per-port and front-panel settings under *Configuration*, and signal detection under *Diagnostic*.
+
+Standby is **not** treated as unavailable. The matrix is still reachable and still remembers its routing, so switching it off changes the power switch and nothing else.
 
 The preset select reads `unknown` until you pick one. That is deliberate: the firmware reports preset *names* but never which one is active, and there is no command to read a preset's stored routing back, so any other value would be a guess. Routing an individual output after recalling a preset likewise leaves the select showing the preset you last chose.
 

@@ -29,6 +29,12 @@ cp -r custom_components/hdcvt_matrix /z/custom_components/hdcvt_matrix
 find /z/custom_components/hdcvt_matrix -name __pycache__ -type d -exec rm -rf {} +
 ```
 
+Then check it landed:
+
+```bash
+diff -r --brief custom_components/hdcvt_matrix /z/custom_components/hdcvt_matrix
+```
+
 A **new platform** needs an HA restart; edits to an existing one need only a
 reload of the config entry.
 
