@@ -7,17 +7,20 @@ from pathlib import Path
 from typing import Any
 
 import aiohttp
-import pytest
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+import pytest
+
+# Not in phcc's sparse __all__; see the note in conftest.
+# noinspection PyProtectedMember
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hdcvt_matrix.const import CONF_USE_DEFAULT_CREDENTIALS, DOMAIN
 
-from .conftest import PatchClientsession, make_session
+from .conftest import PatchClientSession, make_session
 
 HOST = "192.168.10.60"
 MAC = "6C:DF:FB:01:AB:CD"
@@ -53,7 +56,7 @@ def test_dhcp_matcher_does_not_require_a_hostname() -> None:
 
 
 async def test_user_flow_creates_entry(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """A reachable matrix with good credentials produces an entry keyed by MAC."""
     result = await hass.config_entries.flow.async_init(
@@ -85,7 +88,7 @@ async def test_user_flow_creates_entry(
 
 
 async def test_user_flow_without_credentials(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """Credentials are optional, because the API answers reads unauthenticated."""
     result = await hass.config_entries.flow.async_init(
@@ -104,7 +107,7 @@ async def test_user_flow_without_credentials(
 
 
 async def test_default_credentials_checkbox_fills_them_in(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """Ticking the box stores the factory pair, so host alone is enough."""
     result = await hass.config_entries.flow.async_init(
@@ -135,7 +138,7 @@ async def test_default_credentials_checkbox_fills_them_in(
 
 
 async def test_default_credentials_checkbox_beats_typed_values(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """The label promises the defaults win, so typed values must not sneak through."""
     result = await hass.config_entries.flow.async_init(
@@ -159,7 +162,7 @@ async def test_default_credentials_checkbox_beats_typed_values(
 
 
 async def test_unticking_uses_typed_credentials(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """With the box clear, whatever was typed is what gets stored."""
     result = await hass.config_entries.flow.async_init(
@@ -198,7 +201,7 @@ async def test_unticking_uses_typed_credentials(
 )
 async def test_user_flow_errors_then_recovers(
     hass: HomeAssistant,
-    patch_clientsession: PatchClientsession,
+    patch_clientsession: PatchClientSession,
     session_kwargs: dict[str, Any],
     expected: str,
 ) -> None:
@@ -227,7 +230,7 @@ async def test_user_flow_errors_then_recovers(
 
 
 async def test_user_flow_duplicate_aborts(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """The same matrix cannot be added twice, and the host is refreshed."""
     entry = MockConfigEntry(
@@ -249,7 +252,7 @@ async def test_user_flow_duplicate_aborts(
 
 
 async def test_dhcp_discovery_confirms(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """A DHCP lease is verified as a matrix, then asks only for credentials."""
     with patch_clientsession(make_session()):
@@ -273,7 +276,7 @@ async def test_dhcp_discovery_confirms(
 
 
 async def test_dhcp_discovery_survives_a_renamed_lease(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """Discovery keys off the MAC, so renaming the lease must not break it."""
     with patch_clientsession(make_session()):
@@ -289,7 +292,7 @@ async def test_dhcp_discovery_survives_a_renamed_lease(
 
 
 async def test_dhcp_discovery_ignores_non_matrix(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """Something else on that MAC prefix must not be offered as a matrix."""
     with patch_clientsession(
@@ -304,7 +307,7 @@ async def test_dhcp_discovery_ignores_non_matrix(
 
 
 async def test_dhcp_discovery_updates_known_host(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """A new lease for a configured matrix just refreshes its host."""
     entry = MockConfigEntry(
@@ -323,7 +326,7 @@ async def test_dhcp_discovery_updates_known_host(
 
 
 async def test_reauth_updates_credentials(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """Reauth swaps the stored credentials without creating a second entry."""
     entry = MockConfigEntry(
@@ -349,7 +352,7 @@ async def test_reauth_updates_credentials(
 
 
 async def test_reconfigure_moves_the_entry(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """A matrix that moved to a new IP keeps its entry and its entities."""
     entry = MockConfigEntry(
@@ -374,7 +377,7 @@ async def test_reconfigure_moves_the_entry(
 
 
 async def test_reconfigure_refuses_a_different_matrix(
-    hass: HomeAssistant, patch_clientsession: PatchClientsession
+    hass: HomeAssistant, patch_clientsession: PatchClientSession
 ) -> None:
     """Rebinding an entry to another unit would orphan all of its entities."""
     entry = MockConfigEntry(

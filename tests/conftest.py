@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
+import json
 from types import TracebackType
 from typing import Any
 from unittest.mock import PropertyMock, patch
 
 import aiohttp
-import pytest
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, State
+import pytest
+
+# phcc's __all__ lists two of its many public helpers, so PyCharm reads the
+# rest as unexported. MockConfigEntry is its documented entry point.
+# noinspection PyProtectedMember
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hdcvt_matrix.const import CONF_FEATURES, DOMAIN, FEATURES
@@ -26,7 +30,7 @@ HTTP_BAD_REQUEST = 400
 
 # Signatures of the fixtures below, so tests taking them stay type-checked.
 type SetupIntegration = Callable[..., Awaitable[FakeSession]]
-type PatchClientsession = Callable[[FakeSession], AbstractContextManager[FakeSession]]
+type PatchClientSession = Callable[[FakeSession], AbstractContextManager[FakeSession]]
 
 # Captured verbatim from an HDP-MXC88A on firmware V1.00.16 / web V2.00.21.
 # Note the 9-element arrays on an 8x8: the last entry is the "all ports"
@@ -279,7 +283,7 @@ def auto_enable_all_entities() -> Iterator[None]:
 
 
 @pytest.fixture
-def patch_clientsession() -> PatchClientsession:
+def patch_clientsession() -> PatchClientSession:
     """Patch the client session in both the flow and the entry setup.
 
     A finished flow creates an entry that Home Assistant then sets up, so

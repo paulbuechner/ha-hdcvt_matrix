@@ -7,17 +7,17 @@ lives here instead; the common ones (display power, volume) stay as buttons.
 
 from __future__ import annotations
 
-import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import device_registry as dr
+import voluptuous as vol
 
 from .api import CEC_INPUT_COMMANDS, CEC_OUTPUT_COMMANDS
 from .const import DOMAIN
 from .coordinator import HdcvtMatrixCoordinator
+from .registry import device_reg
 
 SERVICE_SEND_DISPLAY_COMMAND = "send_display_command"
 SERVICE_SEND_SOURCE_COMMAND = "send_source_command"
@@ -43,7 +43,7 @@ def _schema(commands: dict[str, int]) -> vol.Schema:
 
 def _coordinator_for(hass: HomeAssistant, device_id: str) -> HdcvtMatrixCoordinator:
     """Resolve a targeted device to its loaded coordinator."""
-    device = dr.async_get(hass).async_get(device_id)
+    device = device_reg(hass).async_get(device_id)
     if device is None:
         raise ServiceValidationError(f"No device with id {device_id}")
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -34,6 +33,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+import voluptuous as vol
 
 from .api import (
     HdcvtMatrixClient,

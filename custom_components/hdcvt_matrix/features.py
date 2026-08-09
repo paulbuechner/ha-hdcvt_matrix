@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_FEATURES
+from .registry import entity_reg
 
 
 def enabled(entry: ConfigEntry, feature: str) -> bool:
@@ -30,7 +31,7 @@ def async_prune(
     always matches what the current options ask for.
     """
     wanted = set(keep)
-    registry = er.async_get(hass)
+    registry = entity_reg(hass)
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.domain == platform and entity.unique_id not in wanted:
             registry.async_remove(entity.entity_id)

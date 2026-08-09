@@ -74,6 +74,14 @@ ignore = [
   "SLF001",   # exercising a private helper directly is fair in a unit test
 ]
 
+[tool.ruff.lint.isort]
+# Matches Home Assistant core, so this reads like the integrations next to it:
+# one line per module even when aliased, and `import x` sorted in among the
+# `from x import y` rather than hoisted above it.
+combine-as-imports = true
+force-sort-within-sections = true
+known-first-party = ["custom_components", "tests"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 

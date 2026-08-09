@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import timedelta
+import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL
@@ -29,6 +29,11 @@ _LOGGER = logging.getLogger(__name__)
 
 class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
     """Poll a single matrix and share the result across its entities."""
+
+    # Restated from the generic base. Type checkers that do not follow
+    # DataUpdateCoordinator[MatrixState] through to `.data` otherwise infer Any
+    # here, which then propagates into every `_value()` call in the platforms.
+    data: MatrixState
 
     def __init__(
         self,

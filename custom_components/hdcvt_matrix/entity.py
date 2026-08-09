@@ -26,6 +26,10 @@ class HdcvtMatrixEntity(CoordinatorEntity[HdcvtMatrixCoordinator]):
 
     _attr_has_entity_name = True
 
+    # Same reason: spelled out so `self.coordinator` resolves without having to
+    # follow the CoordinatorEntity generic.
+    coordinator: HdcvtMatrixCoordinator
+
     def __init__(self, coordinator: HdcvtMatrixCoordinator, key: str) -> None:
         """Initialise the entity and bind it to the matrix device."""
         super().__init__(coordinator)

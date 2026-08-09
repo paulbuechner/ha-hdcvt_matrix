@@ -10,7 +10,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from custom_components.hdcvt_matrix.const import (
     CONF_FEATURES,
@@ -18,13 +17,14 @@ from custom_components.hdcvt_matrix.const import (
     FEATURE_RENAMING,
     FEATURE_SIGNAL_SENSORS,
 )
+from custom_components.hdcvt_matrix.registry import entity_reg
 
 from .conftest import MAC, SetupIntegration, make_session
 
 
 def _keys(hass: HomeAssistant) -> set[str]:
     """Every registry entry this integration owns, by unique id suffix."""
-    registry = er.async_get(hass)
+    registry = entity_reg(hass)
     return {
         entry.unique_id.removeprefix(f"{MAC}_")
         for entry in registry.entities.values()

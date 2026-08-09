@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
-from homeassistant.components.button.const import DOMAIN as BUTTON_DOMAIN
-from homeassistant.components.button.const import SERVICE_PRESS
+from homeassistant.components.button.const import DOMAIN as BUTTON_DOMAIN, SERVICE_PRESS
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er
+import pytest
 
 from custom_components.hdcvt_matrix.const import DOMAIN
+from custom_components.hdcvt_matrix.registry import entity_reg
 
 from .conftest import MAC, SetupIntegration, make_session
 
@@ -19,7 +18,7 @@ STANDBY = {"get video status": {"comhead": "get video status", "power": 0}}
 
 def button_id(hass: HomeAssistant, index: int) -> str:
     """Resolve the save button for a one-based preset slot."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "button", DOMAIN, f"{MAC}_save_preset_{index}"
     )
     assert resolved is not None
@@ -75,14 +74,14 @@ async def test_unavailable_in_standby(
     await setup_integration(make_session(overrides=STANDBY))
 
     assert (
-        er.async_get(hass).async_get_entity_id("button", DOMAIN, f"{MAC}_save_preset_1")
+        entity_reg(hass).async_get_entity_id("button", DOMAIN, f"{MAC}_save_preset_1")
         is None
     )
 
 
 def display_id(hass: HomeAssistant, output: int, action: str) -> str:
     """Resolve a CEC display power button by unique id."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "button", DOMAIN, f"{MAC}_output_{output}_display_{action}"
     )
     assert resolved is not None
@@ -162,7 +161,7 @@ async def test_reboot_sends_the_flag(
     """Reboot carries a scalar flag, like the other system commands."""
     session = await setup_integration(make_session())
 
-    target = er.async_get(hass).async_get_entity_id("button", DOMAIN, f"{MAC}_reboot")
+    target = entity_reg(hass).async_get_entity_id("button", DOMAIN, f"{MAC}_reboot")
     assert target is not None
 
     await hass.services.async_call(

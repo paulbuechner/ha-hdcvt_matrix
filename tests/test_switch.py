@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 from homeassistant.components.switch.const import DOMAIN as SWITCH_DOMAIN
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -16,11 +15,18 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er
+import pytest
 
 from custom_components.hdcvt_matrix.const import DOMAIN
+from custom_components.hdcvt_matrix.registry import entity_reg
 
-from .conftest import MAC, FakeSession, SetupIntegration, get_state, make_session
+from .conftest import (
+    MAC,
+    FakeSession,
+    SetupIntegration,
+    get_state,
+    make_session,
+)
 
 STANDBY = {
     "get video status": {"comhead": "get video status", "power": 0},
@@ -34,14 +40,14 @@ def _power_calls(session: FakeSession) -> list[dict[str, Any]]:
 
 def switch_id(hass: HomeAssistant) -> str:
     """Resolve the power switch by unique id."""
-    resolved = er.async_get(hass).async_get_entity_id("switch", DOMAIN, f"{MAC}_power")
+    resolved = entity_reg(hass).async_get_entity_id("switch", DOMAIN, f"{MAC}_power")
     assert resolved is not None
     return resolved
 
 
 def select_id(hass: HomeAssistant) -> str:
     """Resolve the preset select by unique id."""
-    resolved = er.async_get(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_preset")
+    resolved = entity_reg(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_preset")
     assert resolved is not None
     return resolved
 
@@ -173,7 +179,7 @@ async def test_device_refusal_surfaces(
 
 def output_switch_id(hass: HomeAssistant, output: int, key: str) -> str:
     """Resolve a per-output switch by unique id."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "switch", DOMAIN, f"{MAC}_output_{output}_{key}"
     )
     assert resolved is not None
@@ -229,14 +235,14 @@ async def test_output_switches_are_config_category(
     """Per-output plumbing is configuration, not a primary control."""
     await setup_integration(make_session())
 
-    entry = er.async_get(hass).async_get(output_switch_id(hass, 1, "stream"))
+    entry = entity_reg(hass).async_get(output_switch_id(hass, 1, "stream"))
     assert entry is not None
     assert entry.entity_category == EntityCategory.CONFIG
 
 
 def panel_id(hass: HomeAssistant, key: str) -> str:
     """Resolve a front panel switch by unique id."""
-    resolved = er.async_get(hass).async_get_entity_id("switch", DOMAIN, f"{MAC}_{key}")
+    resolved = entity_reg(hass).async_get_entity_id("switch", DOMAIN, f"{MAC}_{key}")
     assert resolved is not None
     return resolved
 
@@ -314,7 +320,7 @@ async def test_ext_audio_uses_its_own_port_names(
     """
     await setup_integration(make_session())
 
-    target = er.async_get(hass).async_get_entity_id(
+    target = entity_reg(hass).async_get_entity_id(
         "switch", DOMAIN, f"{MAC}_ext_audio_1_out"
     )
     assert target is not None

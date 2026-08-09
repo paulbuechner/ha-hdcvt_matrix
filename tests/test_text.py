@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from homeassistant.components.text.const import DOMAIN as TEXT_DOMAIN
-from homeassistant.components.text.const import SERVICE_SET_VALUE
+from homeassistant.components.text.const import DOMAIN as TEXT_DOMAIN, SERVICE_SET_VALUE
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from custom_components.hdcvt_matrix.const import DOMAIN
+from custom_components.hdcvt_matrix.registry import entity_reg
 
 from .conftest import MAC, SetupIntegration, get_state, make_session
 
 
 def name_id(hass: HomeAssistant, kind: str, index: int) -> str:
     """Resolve a name field by unique id."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "text", DOMAIN, f"{MAC}_{kind}_{index}_name"
     )
     assert resolved is not None

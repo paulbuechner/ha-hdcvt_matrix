@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-import voluptuous as vol
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import device_registry as dr
+import pytest
+import voluptuous as vol
 
 from custom_components.hdcvt_matrix.const import DOMAIN
+from custom_components.hdcvt_matrix.registry import device_reg
 
 from .conftest import MAC, FakeSession, SetupIntegration, make_session
 
@@ -21,7 +21,7 @@ SOURCE = "send_source_command"
 
 def matrix_device_id(hass: HomeAssistant) -> str:
     """Return the device id of the configured matrix."""
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, MAC)})
+    device = device_reg(hass).async_get_device(identifiers={(DOMAIN, MAC)})
     assert device is not None
     return device.id
 
@@ -109,13 +109,14 @@ async def test_display_rejects_a_source_only_command(
 ) -> None:
     """A display cannot be told to fast forward; the schema refuses it."""
     session = await setup_integration(make_session())
+    device_id = matrix_device_id(hass)
 
     with pytest.raises(vol.Invalid):
         await hass.services.async_call(
             DOMAIN,
             DISPLAY,
             {
-                ATTR_DEVICE_ID: matrix_device_id(hass),
+                ATTR_DEVICE_ID: device_id,
                 "port": 1,
                 "command": "fast_forward",
             },

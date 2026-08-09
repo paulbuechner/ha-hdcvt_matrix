@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from homeassistant.const import STATE_OFF, STATE_ON, EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from custom_components.hdcvt_matrix.const import DOMAIN
+from custom_components.hdcvt_matrix.registry import entity_reg
 
 from .conftest import MAC, SetupIntegration, get_state, make_session
 
 
 def sensor_id(hass: HomeAssistant, key: str) -> str:
     """Resolve a binary sensor by unique id."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "binary_sensor", DOMAIN, f"{MAC}_{key}"
     )
     assert resolved is not None
@@ -58,6 +58,6 @@ async def test_sensors_are_diagnostic(
     """These are read-only facts about cabling, not primary controls."""
     await setup_integration(make_session())
 
-    entry = er.async_get(hass).async_get(sensor_id(hass, "input_1_signal"))
+    entry = entity_reg(hass).async_get(sensor_id(hass, "input_1_signal"))
     assert entry is not None
     assert entry.entity_category == EntityCategory.DIAGNOSTIC

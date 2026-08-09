@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import HdcvtMatrixClient, MatrixAuthError, MatrixError
 from .const import DOMAIN, MANUFACTURER, PLATFORMS
 from .coordinator import HdcvtMatrixCoordinator
+from .registry import device_reg
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HdcvtMatrixConfigEntry) 
 
     # Registered explicitly so the device carries its name and identity even if
     # a platform fails to set up.
-    device_registry = dr.async_get(hass)
+    device_registry = device_reg(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, info.mac_address)},

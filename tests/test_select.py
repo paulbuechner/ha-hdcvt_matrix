@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
 from homeassistant.components.select import (
     ATTR_OPTION,
-    SERVICE_SELECT_OPTION,
-)
-from homeassistant.components.select import (
     DOMAIN as SELECT_DOMAIN,
+    SERVICE_SELECT_OPTION,
 )
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -17,24 +14,28 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import entity_registry as er
+import pytest
+
+# Not in phcc's sparse __all__; see the note in conftest.
+# noinspection PyProtectedMember
 from pytest_homeassistant_custom_component.common import mock_restore_cache
 
 from custom_components.hdcvt_matrix.const import DOMAIN
+from custom_components.hdcvt_matrix.registry import entity_reg
 
 from .conftest import MAC, SetupIntegration, get_state, make_session
 
 
 def entity_id(hass: HomeAssistant) -> str:
     """Resolve the select by unique id, rather than guessing its slug."""
-    resolved = er.async_get(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_preset")
+    resolved = entity_reg(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_preset")
     assert resolved is not None
     return resolved
 
 
 def output_id(hass: HomeAssistant, output: int) -> str:
     """Resolve the select for a one-based output."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "select", DOMAIN, f"{MAC}_output_{output}"
     )
     assert resolved is not None
@@ -50,7 +51,7 @@ async def test_one_select_per_output(
     for output in range(1, 9):
         assert hass.states.get(output_id(hass, output)) is not None
     assert (
-        er.async_get(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_output_9")
+        entity_reg(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_output_9")
         is None
     )
 
@@ -225,7 +226,7 @@ async def test_device_refusal_surfaces(
 
 def mode_id(hass: HomeAssistant, output: int, key: str) -> str:
     """Resolve a per-output mode select by unique id."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "select", DOMAIN, f"{MAC}_output_{output}_{key}"
     )
     assert resolved is not None
@@ -312,7 +313,7 @@ async def test_unknown_firmware_mode_reads_as_none(
 
 def edid_id(hass: HomeAssistant, source: int) -> str:
     """Resolve the EDID select for a one-based input."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "select", DOMAIN, f"{MAC}_input_{source}_edid"
     )
     assert resolved is not None
@@ -361,7 +362,7 @@ async def test_edid_offers_every_profile(
 
 def ext_audio_id(hass: HomeAssistant, output: int) -> str:
     """Resolve the de-embedded audio routing select for a one-based output."""
-    resolved = er.async_get(hass).async_get_entity_id(
+    resolved = entity_reg(hass).async_get_entity_id(
         "select", DOMAIN, f"{MAC}_ext_audio_{output}"
     )
     assert resolved is not None
@@ -416,7 +417,7 @@ async def test_audio_mode_selection(
     """The mode select drives how the audio outputs behave."""
     session = await setup_integration(make_session())
 
-    target = er.async_get(hass).async_get_entity_id(
+    target = entity_reg(hass).async_get_entity_id(
         "select", DOMAIN, f"{MAC}_ext_audio_mode"
     )
     assert target is not None
@@ -439,9 +440,7 @@ async def test_baud_rate_decodes_the_firmware_id(
     """Ids start at 1 here, so 6 is 115200 rather than an off-by-one."""
     session = await setup_integration(make_session())
 
-    target = er.async_get(hass).async_get_entity_id(
-        "select", DOMAIN, f"{MAC}_baud_rate"
-    )
+    target = entity_reg(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_baud_rate")
     assert target is not None
     assert get_state(hass, target).state == "115200"
 
@@ -462,7 +461,7 @@ async def test_lcd_timeout_reads_the_mode_field(
     """`mode` in get system status is the backlight timeout, not a matrix mode."""
     session = await setup_integration(make_session())
 
-    target = er.async_get(hass).async_get_entity_id(
+    target = entity_reg(hass).async_get_entity_id(
         "select", DOMAIN, f"{MAC}_lcd_on_time"
     )
     assert target is not None
