@@ -203,12 +203,19 @@ async def test_restore_rebuilds_the_slots(
     assert get_state(hass, sensor(hass)).state == "on"
 
     session.requests.clear()
-    await hass.services.async_call(
-        BUTTON_DOMAIN,
-        SERVICE_PRESS,
-        {ATTR_ENTITY_ID: button(hass, "restore_presets")},
-        blocking=True,
-    )
+    # The restore reads the slots back to confirm they took.
+    with patch.object(
+        MatrixTelnetClient,
+        "async_command",
+        new_callable=AsyncMock,
+        side_effect=telnet_presets({1: SLOT_ROUTES}),
+    ):
+        await hass.services.async_call(
+            BUTTON_DOMAIN,
+            SERVICE_PRESS,
+            {ATTR_ENTITY_ID: button(hass, "restore_presets")},
+            blocking=True,
+        )
     # The rename inside the restore updated the fake device's names, so the
     # confirming poll agrees on its own.
     await hass.async_block_till_done()
@@ -267,12 +274,18 @@ async def test_edid_drift_trips_and_restores(
     assert state.attributes["mismatched_edid_inputs"] == list(range(1, 9))
 
     session.requests.clear()
-    await hass.services.async_call(
-        BUTTON_DOMAIN,
-        SERVICE_PRESS,
-        {ATTR_ENTITY_ID: button(hass, "restore_presets")},
-        blocking=True,
-    )
+    with patch.object(
+        MatrixTelnetClient,
+        "async_command",
+        new_callable=AsyncMock,
+        side_effect=telnet_presets({1: SLOT_ROUTES}),
+    ):
+        await hass.services.async_call(
+            BUTTON_DOMAIN,
+            SERVICE_PRESS,
+            {ATTR_ENTITY_ID: button(hass, "restore_presets")},
+            blocking=True,
+        )
     await hass.async_block_till_done()
 
     edid_writes = [r for r in session.requests if r["comhead"] == "set edid"]
@@ -375,6 +388,82 @@ async def test_a_stored_active_preset_survives_a_reload(
 
     assert coordinator_of(hass).active_preset == 3
     assert get_state(hass, target).state == "Console"
+
+
+async def test_active_preset_follows_the_live_routing(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Follow the device, not just our own recalls.
+
+    A preset applied on the front panel shows up, and a route changed by
+    hand clears the reading instead of leaving it stale.
+    """
+    session = await setup_integration(make_session())
+
+    # Slot 1 holds the routing that is live, so backing up makes it match.
+    with patch.object(
+        MatrixTelnetClient,
+        "async_command",
+        new_callable=AsyncMock,
+        side_effect=telnet_presets({1: [1, 2, 3, 4, 5, 6, 7, 8], 2: SLOT_ROUTES}),
+    ):
+        await hass.services.async_call(
+            BUTTON_DOMAIN,
+            SERVICE_PRESS,
+            {ATTR_ENTITY_ID: button(hass, "backup_presets")},
+            blocking=True,
+        )
+    assert coordinator_of(hass).active_preset == 1
+
+    # Someone recalls slot 2 on the front panel: the matrix reports the new
+    # routing and nothing tells Home Assistant a preset was applied.
+    session.set_routes(list(SLOT_ROUTES))
+    await coordinator_of(hass).async_refresh()
+    await hass.async_block_till_done()
+    assert coordinator_of(hass).active_preset == 2
+
+    # One output moved by hand: no preset is in effect any more.
+    session.set_routes([3, *SLOT_ROUTES[1:]])
+    await coordinator_of(hass).async_refresh()
+    await hass.async_block_till_done()
+    assert coordinator_of(hass).active_preset is None
+
+
+async def test_a_failed_restore_is_reported(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """Slots are read back afterwards, so a silent failure is not silent."""
+    await setup_integration(make_session())
+
+    with patch.object(
+        MatrixTelnetClient,
+        "async_command",
+        new_callable=AsyncMock,
+        side_effect=telnet_presets({1: SLOT_ROUTES}),
+    ):
+        await hass.services.async_call(
+            BUTTON_DOMAIN,
+            SERVICE_PRESS,
+            {ATTR_ENTITY_ID: button(hass, "backup_presets")},
+            blocking=True,
+        )
+
+    # The device reports the slot as empty after the restore wrote it.
+    with (
+        patch.object(
+            MatrixTelnetClient,
+            "async_command",
+            new_callable=AsyncMock,
+            side_effect=telnet_presets({}),
+        ),
+        pytest.raises(HomeAssistantError, match="did not store preset 1"),
+    ):
+        await hass.services.async_call(
+            BUTTON_DOMAIN,
+            SERVICE_PRESS,
+            {ATTR_ENTITY_ID: button(hass, "restore_presets")},
+            blocking=True,
+        )
 
 
 async def test_restore_without_backup_errors(

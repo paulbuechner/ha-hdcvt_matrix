@@ -77,12 +77,17 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         # JSON API lacks. Polling and everything else stays on HTTP.
         self.telnet = telnet or MatrixTelnetClient(client.host)
         self.info = info
-        # The firmware reports preset names but never says which one is active.
-        # So the only preset we can honestly report is one we applied
-        # ourselves; before that the answer is "unknown". Persisted below,
-        # not just held here: a reload while the matrix is unreachable used
-        # to lose it, because the entity's last state was then "unavailable"
-        # rather than a preset name.
+        # The firmware never reports which preset is active, so this is
+        # derived: each poll matches the live routing against the backed-up
+        # slot contents, which costs nothing extra because both are already
+        # to hand. That sees recalls made on the front panel or in the web
+        # UI, and drops to "unknown" once a single route is changed by hand.
+        #
+        # Without a backup there is nothing to match, so the record of what
+        # we applied ourselves remains, and it also breaks ties when two
+        # slots hold the same routing. It is persisted rather than merely
+        # held here: a reload while the matrix is unreachable used to lose
+        # it, the entity's last state then being "unavailable".
         self.active_preset: int | None = None
         # Preset contents and EDID selections survive here, because they do
         # not survive on the device: flashing firmware wipes the slots and
@@ -116,6 +121,7 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             return replace(self.data, power=state.power)
 
         self._refresh_backup_drift(state)
+        self._refresh_active_preset(state)
         return state
 
     async def _async_write(
@@ -458,6 +464,31 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             raise
         await self._async_persist_active_preset()
 
+    def _refresh_active_preset(self, state: MatrixState) -> None:
+        """Derive the active preset from the routing the matrix reports.
+
+        A slot is active when the live routing is exactly its stored
+        routing. The remembered slot wins when it still matches, so two
+        slots holding the same routing do not make the reading flip about;
+        otherwise the lowest matching slot is taken.
+
+        With no backup there is nothing to compare, so whatever we last
+        applied stands. Ignored while the matrix is off, where the routing
+        is still reported but recalls have not been applied to it.
+        """
+        if not self.preset_backup or not state.power or not state.routes:
+            return
+
+        routes = list(state.routes)
+        matches = [
+            slot
+            for slot, backup in sorted(self.preset_backup.items())
+            if backup["routes"] == routes
+        ]
+        if self.active_preset in matches:
+            return
+        self.active_preset = matches[0] if matches else None
+
     async def async_adopt_active_preset(self, index: int) -> None:
         """Take an active preset recovered elsewhere, and persist it."""
         self.active_preset = index
@@ -536,11 +567,16 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         """
         names = self.data.preset_names
         presets: dict[int, PresetBackupSlot] = {}
+        changed: list[int] = []
         try:
             for slot in range(1, len(names) + 1):
                 routes = await self.telnet.async_read_preset(slot)
-                if routes is not None:
-                    presets[slot] = {"name": names[slot - 1], "routes": routes}
+                if routes is None:
+                    continue
+                presets[slot] = {"name": names[slot - 1], "routes": routes}
+                previous = self.preset_backup.get(slot)
+                if previous is not None and previous["routes"] != routes:
+                    changed.append(slot)
         except MatrixError as err:
             raise HomeAssistantError(f"Could not back up the presets: {err}") from err
 
@@ -551,12 +587,35 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
                 "The matrix reports no saved presets; nothing was backed up"
             )
 
+        if changed:
+            _LOGGER.info(
+                "%s: preset %s changed on the device since the last backup",
+                self.client.host,
+                ", ".join(str(slot) for slot in changed),
+            )
+
         self.preset_backup = presets
         self.edid_backup = {
             source: profile
             for source, profile in enumerate(self.data.input_edids, start=1)
         }
         await self._async_persist_backup()
+        # Contents may now match a different slot than before.
+        if self.data is not None:
+            self._refresh_active_preset(self.data)
+            self.async_update_listeners()
+
+    async def _async_verify_slots(self) -> list[int]:
+        """Read the backed-up slots back, returning those that do not match.
+
+        Off the polling path: a slot read takes a second or two, which is
+        affordable once after a restore and never per poll.
+        """
+        return [
+            slot
+            for slot, backup in sorted(self.preset_backup.items())
+            if await self.telnet.async_read_preset(slot) != backup["routes"]
+        ]
 
     async def _async_push_backup(self, live: list[int]) -> None:
         """Drive the device through each backed-up slot, then back.
@@ -601,12 +660,24 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
                     and self.data.input_edids[source - 1] != profile
                 ):
                     await self.client.async_set_edid(source, profile)
+            wrong = await self._async_verify_slots()
         except MatrixAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except MatrixError as err:
             raise HomeAssistantError(f"Could not restore the presets: {err}") from err
 
-        # Reflect the restored names and EDIDs at once; the refresh confirms.
+        self._apply_restored_state()
+        await self.async_request_refresh()
+
+        if wrong:
+            raise HomeAssistantError(
+                "Restored, but the matrix did not store "
+                f"{'presets' if len(wrong) > 1 else 'preset'} "
+                f"{', '.join(str(slot) for slot in wrong)} as expected"
+            )
+
+    def _apply_restored_state(self) -> None:
+        """Reflect the restored names and EDIDs; the refresh confirms them."""
         for slot, backup in self.preset_backup.items():
             if slot <= len(self.data.preset_names):
                 self.data.preset_names[slot - 1] = backup["name"]
@@ -615,4 +686,3 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
                 self.data.input_edids[source - 1] = profile
         self._refresh_backup_drift()
         self.async_update_listeners()
-        await self.async_request_refresh()

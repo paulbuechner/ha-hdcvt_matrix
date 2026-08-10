@@ -179,10 +179,24 @@ class FakeResponse:
 class FakeSession:
     """Session stand-in dispatching on the request body's ``comhead``."""
 
-    def __init__(self, handler: Callable[[dict[str, Any]], FakeResponse]) -> None:
+    def __init__(
+        self,
+        handler: Callable[[dict[str, Any]], FakeResponse],
+        state: dict[str, Any] | None = None,
+    ) -> None:
         """Store the handler and start a call log."""
         self._handler = handler
+        self._state = state if state is not None else {}
         self.requests: list[dict[str, Any]] = []
+
+    def set_routes(self, routes: list[int]) -> None:
+        """Reroute the fake device behind Home Assistant's back.
+
+        What the front panel, the IR remote and the web UI all do: the next
+        poll reports new routing with nothing having been asked of us.
+        """
+        aggregate = self._state.get("allsource", [])[len(routes) :]
+        self._state["allsource"] = [*routes, *aggregate]
 
     def post(self, url: str, *, json: Any, timeout: Any = None) -> FakeResponse:
         """Record the request and hand back the canned response."""
@@ -276,7 +290,7 @@ def make_session(
             body = {**body, "power": state["power"]}
         return FakeResponse(json.dumps(body))
 
-    return FakeSession(handler)
+    return FakeSession(handler, state)
 
 
 def get_state(hass: HomeAssistant, entity_id: str) -> State:

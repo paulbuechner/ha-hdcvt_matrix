@@ -223,11 +223,11 @@ class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, RestoreEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        """The preset we last applied, or None if we have never applied one.
+        """The preset whose routing is in effect, or None if none is.
 
-        The firmware does not report an active preset, so anything else here
-        would be a guess. Recalling a preset also does not stop someone routing
-        an individual output afterwards, which would leave this stale.
+        The firmware does not report this, so the coordinator derives it by
+        matching the live routing against the backed-up slot contents,
+        falling back to whatever we last applied when there is no backup.
         """
         index = self.coordinator.active_preset
         names = self.coordinator.data.preset_names
