@@ -13,27 +13,58 @@ docker run --rm -v "$PWD:/github/workspace" ghcr.io/home-assistant/hassfest
 ```
 
 Ruff is the exception — it needs no HA import, so run it natively from the
-`ha-hdcvt` conda env. Docker Desktop does not autostart; launch it and the
-daemon is up in ~10s.
+`ha-hdcvt` conda env where that exists (the Windows machine). The macOS
+machine has no such env; the dev image carries the pinned ruff, so run it in
+Docker there. Docker Desktop does not autostart; launch it and the daemon is
+up in ~10s.
 
 Full green means: `ruff check` + `ruff format --check` + `mypy` + `pytest` +
 `hassfest`. Run all five before saying something works.
 
 ## Deploying to the live matrix
 
-The test instance is at `\\homeassistant\config`, mounted on `Z:`.
+The HA test instance's `config` share is mounted over SMB. The mount point
+differs per dev machine, so the deploy commands below go through `$HA_CONFIG` —
+set it once per shell, from Git Bash on Windows and any shell on macOS.
+
+**Windows** — map the share to `Z:` (the `*` prompts for the password instead of
+putting it in the command line):
 
 ```bash
-rm -rf /z/custom_components/hdcvt_matrix
-cp -r custom_components/hdcvt_matrix /z/custom_components/hdcvt_matrix
-find /z/custom_components/hdcvt_matrix -name __pycache__ -type d -exec rm -rf {} +
+net use Z: \\<ha-host>\config /user:<samba-user> *
+export HA_CONFIG=/z
+```
+
+**macOS** — create the mount point once, then mount:
+
+```bash
+sudo mkdir -p /Volumes/homeassistant && sudo chown "$(id -un):$(id -gn)" /Volumes/homeassistant
+mount_smbfs //<samba-user>@<ha-host>/config /Volumes/homeassistant
+export HA_CONFIG=/Volumes/homeassistant
+```
+
+Two macOS traps: the mount point must be owned by the user or the mount fails
+with `Operation not permitted`, and `mount_smbfs` ignores the keychain entry
+Finder saves, so it needs an interactive terminal for the password prompt or it
+fails with `Authentication error`.
+
+Deploy:
+
+```bash
+rm -rf "$HA_CONFIG/custom_components/hdcvt_matrix"
+cp -r custom_components/hdcvt_matrix "$HA_CONFIG/custom_components/hdcvt_matrix"
+find "$HA_CONFIG/custom_components/hdcvt_matrix" -name __pycache__ -type d -exec rm -rf {} +
 ```
 
 Then check it landed:
 
 ```bash
-diff -r --brief custom_components/hdcvt_matrix /z/custom_components/hdcvt_matrix
+diff -r --brief custom_components/hdcvt_matrix "$HA_CONFIG/custom_components/hdcvt_matrix"
 ```
+
+On macOS `.DS_Store` files turn up in that diff; `defaults write
+com.apple.desktopservices DSDontWriteNetworkStores -bool true` (then re-login)
+stops Finder writing them to network shares.
 
 A **new platform** needs an HA restart; edits to an existing one need only a
 reload of the config entry.
@@ -43,8 +74,11 @@ reload of the config entry.
 Reverse-engineered from the web UI. All of it is `POST /cgi-bin/instr` with a
 JSON body keyed by `comhead`. Four traps, each of which has already cost time:
 
-- **Unknown commands return plain text** (`not wait comhead [...]`), not JSON.
-  Parse defensively.
+- **Unknown commands fail in two shapes, neither of them JSON.** Plain text
+  (`not wait comhead [...]`) — or, observed on fw V1.00.16 and V1.00.19, a
+  body-less HTTP 200 that hangs until the client times out, stalling the
+  single-threaded CGI for exactly that long. Parse defensively, probe with a
+  short timeout, and space probes out.
 - **The API is sessionless.** `login` validates credentials and returns
   `result: 1`/`0` but issues no token; every other command answers
   unauthenticated. Credentials are checked once at setup.
@@ -54,6 +88,32 @@ JSON body keyed by `comhead`. Four traps, each of which has already cost time:
 - **The web UI's command map lies in at least one place.** It calls the scaler
   command `video scaler`; the firmware only answers to `set video scaler`.
   Probe before trusting a comhead you have not seen work.
+
+Besides `instr` the firmware serves `GET /cgi-bin/getinfo` (plain-text module
+info: firmware string, IP, MAC) and `GET /cgi-bin/query` (a GET-shaped comhead
+read the UI uses). `/cgi-bin/upload` flashes firmware — never touch it.
+Flashing factory-resets user config: the V1.00.16→V1.00.19 upgrade wiped
+routing and preset names.
+
+The IP module also exposes the MCU's text CLI on telnet port 23, unauthenticated
+(TCP 8000 carries the same thing in the vendor GTool's 13-byte binary framing —
+`use_proto_size` in `getinfo`; left unmapped). Dialect: `s …!`/`r …!` with `!`
+as terminator; `help!` self-documents all 86 commands, `status!` dumps the full
+device state in one call, and errors come back as bare `E00` (usually a missing
+`!`). Ports accept `0` = all. The CLI is a superset of the JSON API — extras
+include the full per-input CEC pad (`s cec in x play/pause/stop/rew/ff/previous/
+next/menu/back/up/down/left/right/enter/mute/vol±/on/off!`), `s cec hdmi out y
+active!`, per-output video mode (`s output y video mode x!`, x=1~5, current
+reads "pass-through"), hdcp x=1~5, EDID z=1~39 with writable user slots
+(`s user x edid …!`, x=1~3), per-port link reads (`r link in x!`/`r link out
+y!`) and `s net reboot!`. Still zero fan/temperature commands. Trap: on this
+channel the factory reset is the short, unprefixed `reset!` and reboot is
+`reboot!` — never send either; `power z!` is likewise unprefixed.
+
+Comheads the web UI knows but the integration does not use: `set tpg`,
+`set output resolution`, `set hdr conversion`, `set user edid`, `set hdcp`,
+`set network`, `set defaults network`, `set language`, `get cec status`,
+`set cec index`, `logout`.
 
 Ports are one-based in every payload. `0` usually means "all ports".
 
@@ -69,7 +129,7 @@ Standby, measured on the reference unit rather than assumed:
 Read commands are safe and unauthenticated:
 
 ```bash
-curl -s -X POST http://192.168.10.60/cgi-bin/instr \
+curl -s -X POST http://<matrix-host>/cgi-bin/instr \
   -H 'Content-Type: application/json' -d '{"comhead":"get video status"}'
 ```
 
@@ -79,6 +139,12 @@ a port its current value to test whether a comhead exists without changing
 anything.
 
 Never send `set factory` or `reboot`.
+
+Fan control does not exist — checked 2026-08 against the reference unit on
+fw V1.00.16 and re-checked on V1.00.19: no
+fan/temperature comhead answers, the full web UI vocabulary has no thermal
+strings, and no status payload carries a temperature field. The 5V fan
+headers are unmanaged rail taps; quieting the unit is hardware work.
 
 ## Conventions
 
