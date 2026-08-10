@@ -142,9 +142,13 @@ LCD_ON_TIMES: Final[dict[int, str]] = {
     6: "10_minutes",
 }
 
-# Note the gap: the firmware has no scaler mode 2.
+# The web UI offers only 0, 1 and 3. Modes 2 and 4 are real regardless:
+# enumerated over the telnet CLI against the reference unit (fw V1.00.19),
+# which names them "8k/4k->1080p" and "audio only".
 SCALER_MODES: Final[dict[int, str]] = {
     0: "bypass",
     1: "downscale_4k_to_1080p",
+    2: "downscale_8k_4k_to_1080p",
     3: "auto",
+    4: "audio_only",
 }

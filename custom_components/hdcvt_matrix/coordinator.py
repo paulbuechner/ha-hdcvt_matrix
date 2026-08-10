@@ -21,6 +21,7 @@ from .api import (
     MatrixError,
     MatrixInfo,
     MatrixState,
+    MatrixTelnetClient,
 )
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
@@ -41,6 +42,7 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         entry: ConfigEntry,
         client: HdcvtMatrixClient,
         info: MatrixInfo,
+        telnet: MatrixTelnetClient | None = None,
     ) -> None:
         """Initialise the coordinator."""
         super().__init__(
@@ -53,6 +55,9 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             ),
         )
         self.client = client
+        # Same host, different protocol: the CLI carries the few commands the
+        # JSON API lacks. Polling and everything else stays on HTTP.
+        self.telnet = telnet or MatrixTelnetClient(client.host)
         self.info = info
         # The firmware reports preset names but never says which one is active,
         # and offers no way to read a preset's stored routing back. So the only
@@ -338,6 +343,16 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
     async def async_reboot(self) -> None:
         """Restart the matrix."""
         await self._async_write(self.client.async_reboot(), "reboot the matrix", None)
+
+    async def async_reboot_network(self) -> None:
+        """Restart the IP module; routing and video are unaffected.
+
+        The refresh scheduled afterwards may catch the module mid-restart and
+        fail once; the following poll reconnects.
+        """
+        await self._async_write(
+            self.telnet.async_net_reboot(), "reboot the network module", None
+        )
 
     async def async_save_preset(self, index: int) -> None:
         """Store the current routing into a one-based preset slot."""

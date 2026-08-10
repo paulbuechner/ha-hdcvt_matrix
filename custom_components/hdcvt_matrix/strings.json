@@ -89,6 +89,9 @@
       "reboot": {
         "name": "Reboot"
       },
+      "net_reboot": {
+        "name": "Reboot network module"
+      },
       "clear_preset": {
         "name": "Clear {name}"
       },
@@ -147,7 +150,9 @@
         "state": {
           "bypass": "Bypass",
           "downscale_4k_to_1080p": "4K to 1080p",
-          "auto": "Auto"
+          "downscale_8k_4k_to_1080p": "8K/4K to 1080p",
+          "auto": "Auto",
+          "audio_only": "Audio only"
         }
       },
       "input_edid": {

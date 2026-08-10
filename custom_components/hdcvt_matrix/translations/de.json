@@ -89,6 +89,9 @@
       "reboot": {
         "name": "Neu starten"
       },
+      "net_reboot": {
+        "name": "Netzwerkmodul neu starten"
+      },
       "clear_preset": {
         "name": "{name} leeren"
       },
@@ -147,7 +150,9 @@
         "state": {
           "bypass": "Durchleiten",
           "downscale_4k_to_1080p": "4K auf 1080p",
-          "auto": "Automatisch"
+          "downscale_8k_4k_to_1080p": "8K/4K auf 1080p",
+          "auto": "Automatisch",
+          "audio_only": "Nur Audio"
         }
       },
       "input_edid": {

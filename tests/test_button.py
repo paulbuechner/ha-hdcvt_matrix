@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 from homeassistant.components.button.const import DOMAIN as BUTTON_DOMAIN, SERVICE_PRESS
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 import pytest
 
+from custom_components.hdcvt_matrix.api.telnet import (
+    CMD_NET_REBOOT,
+    MatrixTelnetClient,
+)
 from custom_components.hdcvt_matrix.const import DOMAIN
 from custom_components.hdcvt_matrix.registry import entity_reg
 
@@ -171,3 +177,24 @@ async def test_reboot_sends_the_flag(
     assert [r for r in session.requests if r["comhead"] == "reboot"] == [
         {"comhead": "reboot", "reboot": 1}
     ]
+
+
+async def test_net_reboot_goes_over_telnet(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """The network module restart is the one command with no JSON form."""
+    session = await setup_integration(make_session())
+
+    target = entity_reg(hass).async_get_entity_id("button", DOMAIN, f"{MAC}_net_reboot")
+    assert target is not None
+
+    with patch.object(
+        MatrixTelnetClient, "async_command", new_callable=AsyncMock, return_value=""
+    ) as command:
+        await hass.services.async_call(
+            BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: target}, blocking=True
+        )
+
+    command.assert_awaited_once_with(CMD_NET_REBOOT, tolerate_drop=True)
+    # Nothing about it went over HTTP; the session saw only the usual polls.
+    assert all("net" not in r["comhead"] for r in session.requests)

@@ -81,8 +81,8 @@ async def async_setup_entry(  # NOSONAR
 class _OutputModeSelect(HdcvtMatrixPortEntity, SelectEntity):
     """A select backed by one firmware value per output.
 
-    Firmware values are not contiguous (the scaler has no mode 2), so options
-    map by value rather than by list position.
+    Firmware values do not all start at zero (HDCP and the baud rates start
+    at 1), so options map by value rather than by list position.
     """
 
     _attr_entity_category = EntityCategory.CONFIG

@@ -267,15 +267,24 @@ async def test_hdcp_selection_sends_the_firmware_value(
     assert calls == [{"comhead": "tx hdcp", "hdcp": [6, 2]}]
 
 
-async def test_scaler_options_skip_the_missing_mode(
+async def test_scaler_offers_the_modes_the_web_ui_hides(
     hass: HomeAssistant, setup_integration: SetupIntegration
 ) -> None:
-    """The firmware has no scaler mode 2, so auto must send 3 rather than 2."""
+    """Modes 2 and 4 exist in the firmware even though the web UI hides them.
+
+    Options map by firmware value, not list position: auto must still send 3.
+    """
     session = await setup_integration(make_session())
 
     state = get_state(hass, mode_id(hass, 1, "scaler"))
     assert state.state == "bypass"
-    assert state.attributes["options"] == ["bypass", "downscale_4k_to_1080p", "auto"]
+    assert state.attributes["options"] == [
+        "bypass",
+        "downscale_4k_to_1080p",
+        "downscale_8k_4k_to_1080p",
+        "auto",
+        "audio_only",
+    ]
 
     await hass.services.async_call(
         SELECT_DOMAIN,
@@ -283,9 +292,18 @@ async def test_scaler_options_skip_the_missing_mode(
         {ATTR_ENTITY_ID: mode_id(hass, 2, "scaler"), ATTR_OPTION: "auto"},
         blocking=True,
     )
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: mode_id(hass, 2, "scaler"), ATTR_OPTION: "audio_only"},
+        blocking=True,
+    )
 
     calls = [r for r in session.requests if r["comhead"] == "set video scaler"]
-    assert calls == [{"comhead": "set video scaler", "scaler": [2, 3]}]
+    assert calls == [
+        {"comhead": "set video scaler", "scaler": [2, 3]},
+        {"comhead": "set video scaler", "scaler": [2, 4]},
+    ]
 
 
 async def test_unknown_firmware_mode_reads_as_none(

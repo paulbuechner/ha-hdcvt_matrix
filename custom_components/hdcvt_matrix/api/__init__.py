@@ -7,6 +7,7 @@ Split by job rather than by layer:
 * :mod:`models` -- what the matrix reports about itself
 * :mod:`exceptions` -- the four failure modes callers distinguish
 * :mod:`client` -- the HTTP client itself
+* :mod:`telnet` -- the text-CLI client, for the few commands HTTP lacks
 
 Everything the integration needs is re-exported here, so importing from
 ``.api`` stays the one entry point.
@@ -46,6 +47,7 @@ from .options import (
     LCD_ON_TIMES,
     SCALER_MODES,
 )
+from .telnet import MatrixTelnetClient
 
 __all__ = [
     "BAUD_RATES",
@@ -76,4 +78,5 @@ __all__ = [
     "MatrixResponseError",
     "MatrixSession",
     "MatrixState",
+    "MatrixTelnetClient",
 ]

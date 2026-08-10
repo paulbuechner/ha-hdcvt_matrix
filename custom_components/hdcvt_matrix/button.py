@@ -36,6 +36,7 @@ async def async_setup_entry(  # NOSONAR
 
     if enabled(entry, FEATURE_SYSTEM):
         entities.append(HdcvtMatrixReboot(coordinator))
+        entities.append(HdcvtMatrixNetReboot(coordinator))
 
     if enabled(entry, FEATURE_PRESET_MANAGEMENT):
         for index in range(1, len(coordinator.data.preset_names) + 1):
@@ -116,6 +117,27 @@ class HdcvtMatrixReboot(HdcvtMatrixEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Restart the matrix."""
         await self.coordinator.async_reboot()
+
+
+class HdcvtMatrixNetReboot(HdcvtMatrixEntity, ButtonEntity):
+    """Restart the matrix's IP module.
+
+    The one control with no JSON equivalent, so it goes over the telnet CLI.
+    Rescues a wedged web interface without dropping a single video route;
+    the module is back within seconds and the next poll reconnects.
+    """
+
+    _attr_device_class = ButtonDeviceClass.RESTART
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "net_reboot"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the network module reboot button."""
+        super().__init__(coordinator, "net_reboot")
+
+    async def async_press(self) -> None:
+        """Restart the IP module."""
+        await self.coordinator.async_reboot_network()
 
 
 class HdcvtMatrixClearPreset(HdcvtMatrixPortEntity, ButtonEntity):
