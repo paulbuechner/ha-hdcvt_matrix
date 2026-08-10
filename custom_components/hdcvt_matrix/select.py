@@ -197,10 +197,11 @@ class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, RestoreEntity, SelectEntity):
     async def async_added_to_hass(self) -> None:
         """Carry the last applied preset across a restart.
 
-        The firmware cannot report which preset is active, so our own record is
-        the only one there is, and it lives in memory. Without restoring it the
-        select read unknown after every Home Assistant restart, integration
-        reload, and options change.
+        The coordinator restores it from storage, which is authoritative.
+        This is the fallback for entries whose stored backup predates that,
+        and it can only work when the last state was a preset name: a reload
+        while the matrix was unreachable leaves "unavailable" behind, which
+        is why the record is persisted rather than read back from here.
         """
         await super().async_added_to_hass()
         if self.coordinator.active_preset is not None:
@@ -211,7 +212,9 @@ class HdcvtMatrixPresetSelect(HdcvtMatrixEntity, RestoreEntity, SelectEntity):
             return
         names = self.coordinator.data.preset_names
         if last.state in names:
-            self.coordinator.active_preset = names.index(last.state) + 1
+            await self.coordinator.async_adopt_active_preset(
+                names.index(last.state) + 1
+            )
 
     @property
     def options(self) -> list[str]:

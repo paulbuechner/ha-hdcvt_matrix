@@ -79,7 +79,10 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         self.info = info
         # The firmware reports preset names but never says which one is active.
         # So the only preset we can honestly report is one we applied
-        # ourselves; before that, and after a restart, the answer is "unknown".
+        # ourselves; before that the answer is "unknown". Persisted below,
+        # not just held here: a reload while the matrix is unreachable used
+        # to lose it, because the entity's last state was then "unavailable"
+        # rather than a preset name.
         self.active_preset: int | None = None
         # Preset contents and EDID selections survive here, because they do
         # not survive on the device: flashing firmware wipes the slots and
@@ -453,6 +456,12 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             # A recall that never happened should not lock the user out.
             self._preset_applied_at = None
             raise
+        await self._async_persist_active_preset()
+
+    async def async_adopt_active_preset(self, index: int) -> None:
+        """Take an active preset recovered elsewhere, and persist it."""
+        self.active_preset = index
+        await self._async_persist_active_preset()
 
     async def async_load_preset_backup(self) -> None:
         """Load the preset backup persisted for this entry."""
@@ -467,6 +476,8 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             for source, value in stored.get("input_edids", {}).items()
         }
         self.preset_backup_saved_at = stored.get("saved_at")
+        active = stored.get("active_preset")
+        self.active_preset = int(active) if active is not None else None
         self._refresh_backup_drift()
 
     def _refresh_backup_drift(self, state: MatrixState | None = None) -> None:
@@ -491,22 +502,31 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             if source <= len(edids) and edids[source - 1] != profile
         ]
 
+    def _stored_backup(self) -> dict[str, Any]:
+        """Shape the backup for storage."""
+        return {
+            "saved_at": self.preset_backup_saved_at,
+            "active_preset": self.active_preset,
+            "presets": {str(slot): value for slot, value in self.preset_backup.items()},
+            "input_edids": {
+                str(source): value for source, value in self.edid_backup.items()
+            },
+        }
+
     async def _async_persist_backup(self) -> None:
         """Write the backup to storage and refresh the drift sensor."""
         self.preset_backup_saved_at = dt_util.utcnow().isoformat()
-        await self._backup_store.async_save(
-            {
-                "saved_at": self.preset_backup_saved_at,
-                "presets": {
-                    str(slot): value for slot, value in self.preset_backup.items()
-                },
-                "input_edids": {
-                    str(source): value for source, value in self.edid_backup.items()
-                },
-            }
-        )
+        await self._backup_store.async_save(self._stored_backup())
         self._refresh_backup_drift()
         self.async_update_listeners()
+
+    async def _async_persist_active_preset(self) -> None:
+        """Record which preset was applied, without restamping the backup.
+
+        Kept separate from the backup save so recalling a preset does not
+        make an old snapshot look freshly taken.
+        """
+        await self._backup_store.async_save(self._stored_backup())
 
     async def async_snapshot_presets(self) -> None:
         """Persist every preset slot and every input's EDID selection.

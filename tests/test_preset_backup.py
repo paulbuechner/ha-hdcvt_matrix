@@ -322,6 +322,61 @@ async def test_edid_change_through_ha_updates_the_backup(
     assert get_state(hass, sensor(hass)).state == "off"
 
 
+async def test_recalling_a_preset_persists_it(
+    hass: HomeAssistant,
+    setup_integration: SetupIntegration,
+    hass_storage: dict[str, Any],
+) -> None:
+    """The active preset is stored, not just held in memory.
+
+    A reload while the matrix is unreachable leaves the entity's last state
+    as "unavailable", which no name-matching restore can use.
+    """
+    await setup_integration(make_session())
+
+    target = entity_reg(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_preset")
+    assert target is not None
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: target, ATTR_OPTION: "Console"},
+        blocking=True,
+    )
+
+    assert stored_backup(hass, hass_storage)["active_preset"] == 3
+
+
+async def test_a_stored_active_preset_survives_a_reload(
+    hass: HomeAssistant,
+    setup_integration: SetupIntegration,
+    hass_storage: dict[str, Any],
+) -> None:
+    """After a reload the select reads the stored preset, not unknown."""
+    await setup_integration(make_session())
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+
+    target = entity_reg(hass).async_get_entity_id("select", DOMAIN, f"{MAC}_preset")
+    assert target is not None
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: target, ATTR_OPTION: "Console"},
+        blocking=True,
+    )
+
+    # The matrix is unreachable across the reload, so the entity's last
+    # state is "unavailable" and only storage can carry the record.
+    with patch(
+        "custom_components.hdcvt_matrix.async_get_clientsession",
+        return_value=make_session(),
+    ):
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert coordinator_of(hass).active_preset == 3
+    assert get_state(hass, target).state == "Console"
+
+
 async def test_restore_without_backup_errors(
     hass: HomeAssistant, setup_integration: SetupIntegration
 ) -> None:
