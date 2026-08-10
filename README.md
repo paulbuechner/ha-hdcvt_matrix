@@ -133,7 +133,7 @@ curl -s -X POST http://<matrix>/cgi-bin/instr \
 | `tx stream` | `out: [output, 0\|1]` | enable the output |
 | `set output audio mute` | `mute: [output, 0\|1]` | |
 | `tx hdcp` | `hdcp: [output, mode]` | 1=1.4, 2=2.2, 3=follow sink, 4=follow source, 5=off |
-| `set video scaler` | `scaler: [output, mode]` | 0=bypass, 1=4K→1080p, 3=auto. **Not** `video scaler`, which the web UI's own command map claims and the firmware rejects |
+| `set video scaler` | `scaler: [output, mode]` | 0=bypass, 1=4K→1080p, 2=8K/4K→1080p, 3=auto, 4=audio only. The web UI offers only 0/1/3; 2 and 4 exist regardless, confirmed over the telnet CLI. **Not** `video scaler`, which the web UI's own command map claims and the firmware rejects |
 | `set panel lock` | `lock: 0\|1` | scalar, not an array |
 | `set beep` | `beep: 0\|1` | scalar, not an array |
 | `set edid` | `edid: [input, id]` | 1-36 fixed profiles, 37-39 user slots, 40-47 copy from an output |
@@ -154,7 +154,35 @@ Two traps worth knowing:
 - **Sessionless.** `login` validates credentials but issues no token, and every read answers unauthenticated. The integration verifies credentials at setup so a device-side password change surfaces as a reauth prompt, rather than pretending reads are protected.
 - **Array fields carry a trailing aggregate.** On an 8×8, `allsource` and friends have 9 entries; the last is the "all ports" value the web UI uses for bulk controls. Only `allinputname` / `alloutputname` are sized to the real port count, so those size the matrix.
 
-Unknown commands come back as plain text (`not wait comhead [...]`), not JSON.
+Unknown commands fail in one of two shapes, neither of them JSON: plain text
+(`not wait comhead [...]`) — or, observed on firmware V1.00.16 and V1.00.19, a
+body-less HTTP 200 that hangs until the client times out, stalling the
+single-threaded CGI for exactly that long. Probe with short timeouts.
+
+Besides `instr` the firmware serves `GET /cgi-bin/getinfo` (plain-text module
+info) and `GET /cgi-bin/query` (a GET-shaped comhead read). `/cgi-bin/upload`
+flashes firmware — and flashing factory-resets user config: the
+V1.00.16→V1.00.19 upgrade wiped routing and preset names.
+
+### Telnet CLI
+
+The IP module also exposes the MCU's text console on telnet port 23,
+unauthenticated like the HTTP API. TCP port 8000 carries the same command set
+in the 13-byte binary framing the vendor's GTool uses. The dialect is
+`r …!` / `s …!` with `!` as the terminator; a rejected command answers with a
+bare `E00`, which usually means a missing `!`. Port arguments accept `0` for
+"all ports".
+
+```
+help!             lists all 86 commands
+status!           full device state in one reply
+r type!           → "8x8 hdmi2.1 matrix"
+s net reboot!     restarts the IP module only — the one command with no JSON equivalent
+```
+
+The CLI is otherwise a twin of the JSON API, with a sharper edge: factory
+reset is the unprefixed `reset!` and reboot is `reboot!`, short enough to
+fire by accident.
 
 ## Development
 
