@@ -18,5 +18,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/paulbuechner/ha-hdcvt_matrix/issues",
   "requirements": [],
-  "version": "0.1.3"
+  "version": "0.1.4"
 }
