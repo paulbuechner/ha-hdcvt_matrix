@@ -119,3 +119,29 @@ async def test_a_dropped_read_still_fails_normal_commands() -> None:
 
     with pytest.raises(MatrixConnectionError):
         await client.async_command("r type!")
+
+
+async def test_a_saved_preset_parses_into_routes() -> None:
+    """Each outputN->inputM line lands at its output's position."""
+    reply = b"r preset 2!\r\n" + b"".join(
+        f"output{output}->input{source}\r\n".encode()
+        for output, source in enumerate([7, 8, 1, 2, 3, 4, 5, 6], start=1)
+    )
+    client, _ = make_client(reply)
+
+    assert await client.async_read_preset(2) == [7, 8, 1, 2, 3, 4, 5, 6]
+
+
+async def test_an_empty_preset_reads_as_none() -> None:
+    """The firmware's 'is none' phrasing means an empty slot, not an error."""
+    client, _ = make_client(b"r preset 8!\r\npreset 8 is none,please save a preset\r\n")
+
+    assert await client.async_read_preset(8) is None
+
+
+async def test_a_garbled_preset_raises() -> None:
+    """Half a crosspoint table must fail loudly, not restore half a preset."""
+    client, _ = make_client(b"r preset 1!\r\noutput1->input7\r\noutput5->input2\r\n")
+
+    with pytest.raises(MatrixResponseError):
+        await client.async_read_preset(1)

@@ -35,6 +35,12 @@ _IDLE_WINDOW: Final = 1.0
 
 _ERROR_REPLY: Final = "E00"
 
+# One line per output in a saved preset's reply, e.g. "output3->input1".
+_PRESET_ROUTE_RE: Final = re.compile(r"^output(\d+)->input(\d+)$")
+
+# An empty slot answers "preset N is none,please save a preset".
+_PRESET_EMPTY: Final = "is none"
+
 type TelnetOpener = Callable[
     [str, int], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]
 ]
@@ -63,6 +69,28 @@ class MatrixTelnetClient:
     async def async_net_reboot(self) -> None:
         """Restart the IP module; the connection dying mid-reply is success."""
         await self.async_command(CMD_NET_REBOOT, tolerate_drop=True)
+
+    async def async_read_preset(self, index: int) -> list[int] | None:
+        """Read the routing stored in a one-based preset slot.
+
+        Returns the one-based input feeding each output, or None for an
+        empty slot. The JSON API cannot read preset contents at all; this
+        is the only channel that can.
+        """
+        reply = await self.async_command(f"r preset {index}!")
+        if _PRESET_EMPTY in reply:
+            return None
+
+        routes: dict[int, int] = {}
+        for line in reply.splitlines():
+            match = _PRESET_ROUTE_RE.match(line.strip())
+            if match:
+                routes[int(match.group(1))] = int(match.group(2))
+        if not routes or sorted(routes) != list(range(1, len(routes) + 1)):
+            raise MatrixResponseError(
+                f"{self._host} returned an unreadable preset {index}: {reply[:120]!r}"
+            )
+        return [routes[output] for output in sorted(routes)]
 
     async def async_command(self, command: str, *, tolerate_drop: bool = False) -> str:
         """Send one CLI command and return the reply text.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
+from copy import deepcopy
 import json
 from types import TracebackType
 from typing import Any
@@ -189,6 +190,38 @@ class FakeSession:
         return self._handler(json)
 
 
+def _fixture_list(responses: dict[str, Any], comhead: str, key: str) -> list[Any]:
+    """Return a mutable list field from one of the canned replies."""
+    body = responses.get(comhead)
+    value = body.get(key) if isinstance(body, dict) else None
+    return value if isinstance(value, list) else []
+
+
+def _apply_stateful_write(
+    state: dict[str, Any], responses: dict[str, Any], payload: dict[str, Any]
+) -> bool:
+    """Model a write on the fake device; True when the command is one of ours."""
+    comhead = payload["comhead"]
+    if comhead == "set poweronoff":
+        state["power"] = int(payload["power"])
+    elif comhead == "video switch":
+        output, source = payload["source"]
+        if 1 <= output <= len(state["allsource"]):
+            state["allsource"][output - 1] = source
+    elif comhead == "preset name":
+        names = _fixture_list(responses, "get video status", "allname")
+        if 1 <= payload["index"] <= len(names):
+            names[payload["index"] - 1] = payload["name"]
+    elif comhead == "set edid":
+        source, profile = payload["edid"]
+        edids = _fixture_list(responses, "get input status", "edid")
+        if 1 <= source <= len(edids):
+            edids[source - 1] = profile
+    else:
+        return False
+    return True
+
+
 def make_session(
     *,
     login_ok: bool = True,
@@ -197,13 +230,16 @@ def make_session(
 ) -> FakeSession:
     """Build a session that answers like a real matrix.
 
-    Power and routing are modelled statefully: ``set poweronoff`` and
-    ``video switch`` update them, and every later reply reports the new value,
-    the way the real device behaves once it has settled. Override a command
-    explicitly to simulate a refusal instead.
+    Power, routing, preset names and EDIDs are modelled statefully: ``set
+    poweronoff``, ``video switch``, ``preset name`` and ``set edid`` update
+    them, and every later reply reports the new value, the way the real
+    device behaves once it has settled. Override a command explicitly to
+    simulate a refusal instead. The defaults are deep-copied so that
+    statefulness cannot leak between tests; an override stays the caller's
+    object, so a test can mutate it to simulate on-device changes.
     """
     overrides = overrides or {}
-    responses = {**DEVICE_RESPONSES, **overrides}
+    responses = {**deepcopy(DEVICE_RESPONSES), **overrides}
     responses.setdefault("login", {"comhead": "login", "result": 1 if login_ok else 0})
 
     video = responses.get("get video status")
@@ -215,7 +251,7 @@ def make_session(
     }
     stateful = {
         comhead
-        for comhead in ("set poweronoff", "video switch")
+        for comhead in ("set poweronoff", "video switch", "preset name", "set edid")
         if comhead not in overrides
     }
 
@@ -224,14 +260,7 @@ def make_session(
             raise exc
         comhead = payload["comhead"]
 
-        if comhead == "set poweronoff" and comhead in stateful:
-            state["power"] = int(payload["power"])
-            return FakeResponse(json.dumps({"comhead": comhead, "result": 1}))
-
-        if comhead == "video switch" and comhead in stateful:
-            output, source = payload["source"]
-            if 1 <= output <= len(state["allsource"]):
-                state["allsource"][output - 1] = source
+        if comhead in stateful and _apply_stateful_write(state, responses, payload):
             return FakeResponse(json.dumps({"comhead": comhead, "result": 1}))
 
         if comhead not in responses:

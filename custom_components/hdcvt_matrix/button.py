@@ -39,6 +39,8 @@ async def async_setup_entry(  # NOSONAR
         entities.append(HdcvtMatrixNetReboot(coordinator))
 
     if enabled(entry, FEATURE_PRESET_MANAGEMENT):
+        entities.append(HdcvtMatrixBackupPresets(coordinator))
+        entities.append(HdcvtMatrixRestorePresets(coordinator))
         for index in range(1, len(coordinator.data.preset_names) + 1):
             entities.append(HdcvtMatrixSavePreset(coordinator, index))
             entities.append(HdcvtMatrixClearPreset(coordinator, index))
@@ -117,6 +119,46 @@ class HdcvtMatrixReboot(HdcvtMatrixEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Restart the matrix."""
         await self.coordinator.async_reboot()
+
+
+class HdcvtMatrixBackupPresets(HdcvtMatrixEntity, ButtonEntity):
+    """Snapshot every saved preset into Home Assistant's storage.
+
+    Reads the slots over the telnet CLI, the only channel that can. Saves
+    made through Home Assistant keep the backup fresh on their own; this
+    button catches up after changes made in the device web UI.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "backup_presets"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the backup button."""
+        super().__init__(coordinator, "backup_presets")
+
+    async def async_press(self) -> None:
+        """Read all slots and persist them."""
+        await self.coordinator.async_snapshot_presets()
+
+
+class HdcvtMatrixRestorePresets(HdcvtMatrixEntity, ButtonEntity):
+    """Rebuild the device's presets from the stored backup.
+
+    The one recovery path after a firmware flash wipes the slots. The
+    firmware can only save a preset from live routing, so displays flick
+    through the scenarios while the slots are rebuilt.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "restore_presets"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the restore button."""
+        super().__init__(coordinator, "restore_presets")
+
+    async def async_press(self) -> None:
+        """Apply, save and rename every backed-up slot."""
+        await self.coordinator.async_restore_presets()
 
 
 class HdcvtMatrixNetReboot(HdcvtMatrixEntity, ButtonEntity):

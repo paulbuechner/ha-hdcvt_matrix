@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from homeassistant.components.select import (
     ATTR_OPTION,
     DOMAIN as SELECT_DOMAIN,
@@ -222,6 +224,37 @@ async def test_device_refusal_surfaces(
 
     assert get_state(hass, target).state == STATE_UNKNOWN
     assert session.requests[-1] == {"comhead": "preset set", "index": 1}
+
+
+async def test_preset_recall_has_a_cooldown(
+    hass: HomeAssistant, setup_integration: SetupIntegration
+) -> None:
+    """A second recall inside the settle window is refused, then allowed.
+
+    The matrix takes 3-5 s to apply a preset; a recall fired into that
+    window must not reach the device at all.
+    """
+    session = await setup_integration(make_session())
+
+    async def recall(option: str) -> None:
+        await hass.services.async_call(
+            SELECT_DOMAIN,
+            SERVICE_SELECT_OPTION,
+            {ATTR_ENTITY_ID: entity_id(hass), ATTR_OPTION: option},
+            blocking=True,
+        )
+
+    # Patching the module reference keeps the fake clock out of the event
+    # loop's own time.monotonic calls.
+    with patch("custom_components.hdcvt_matrix.coordinator.time") as mock_time:
+        mock_time.monotonic.side_effect = [0.0, 2.0, 10.0]
+        await recall("Desk PC")
+        with pytest.raises(HomeAssistantError, match="still applying"):
+            await recall("Laptop")
+        await recall("Laptop")
+
+    recalls = [r for r in session.requests if r["comhead"] == "preset set"]
+    assert [r["index"] for r in recalls] == [1, 2]
 
 
 def mode_id(hass: HomeAssistant, output: int, key: str) -> str:

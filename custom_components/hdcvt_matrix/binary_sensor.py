@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -11,9 +13,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HdcvtMatrixConfigEntry
-from .const import FEATURE_SIGNAL_SENSORS
+from .const import FEATURE_PRESET_MANAGEMENT, FEATURE_SIGNAL_SENSORS
 from .coordinator import HdcvtMatrixCoordinator
-from .entity import HdcvtMatrixPortEntity
+from .entity import HdcvtMatrixEntity, HdcvtMatrixPortEntity
 from .features import async_prune, enabled
 
 PARALLEL_UPDATES = 0
@@ -38,8 +40,46 @@ async def async_setup_entry(  # NOSONAR
             HdcvtMatrixOutputSink(coordinator, port)
             for port in range(1, coordinator.data.output_count + 1)
         )
+    if enabled(entry, FEATURE_PRESET_MANAGEMENT):
+        entities.append(HdcvtMatrixPresetBackup(coordinator))
     async_prune(hass, entry, "binary_sensor", (e.unique_id or "" for e in entities))
     async_add_entities(entities)
+
+
+class HdcvtMatrixPresetBackup(HdcvtMatrixEntity, BinarySensorEntity):
+    """Whether the device still matches the stored config backup.
+
+    Trips on the preset names and the per-input EDID ids, both of which
+    every poll already carries — a firmware flash resets them together with
+    the slots it wipes. Preset contents are only readable over the telnet
+    CLI, so they are compared during backup and restore rather than on the
+    polling path.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "preset_backup"
+
+    def __init__(self, coordinator: HdcvtMatrixCoordinator) -> None:
+        """Initialise the backup drift sensor."""
+        super().__init__(coordinator, "preset_backup")
+
+    @property
+    def is_on(self) -> bool:
+        """True when a backed-up preset or EDID no longer matches."""
+        coordinator = self.coordinator
+        return bool(coordinator.preset_backup_drift or coordinator.edid_backup_drift)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose what is backed up and what has drifted."""
+        coordinator = self.coordinator
+        return {
+            "backup_saved_at": coordinator.preset_backup_saved_at,
+            "backed_up_presets": sorted(coordinator.preset_backup),
+            "mismatched_presets": list(coordinator.preset_backup_drift),
+            "mismatched_edid_inputs": list(coordinator.edid_backup_drift),
+        }
 
 
 class HdcvtMatrixInputSignal(HdcvtMatrixPortEntity, BinarySensorEntity):

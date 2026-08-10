@@ -6,12 +6,16 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import timedelta
 import logging
+import time
+from typing import Any, Final, TypedDict
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import (
     CEC_OBJECT_INPUT,
@@ -26,6 +30,20 @@ from .api import (
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+_BACKUP_STORAGE_VERSION: Final = 1
+
+# A preset recall takes 3-5 s to settle on the reference unit, during which
+# the matrix is switching every output. Recalls inside this window are
+# refused rather than queued.
+PRESET_APPLY_COOLDOWN: Final = 5.0
+
+
+class PresetBackupSlot(TypedDict):
+    """One preset as persisted: its name and its stored routing."""
+
+    name: str
+    routes: list[int]
 
 
 class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
@@ -59,11 +77,23 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         # JSON API lacks. Polling and everything else stays on HTTP.
         self.telnet = telnet or MatrixTelnetClient(client.host)
         self.info = info
-        # The firmware reports preset names but never says which one is active,
-        # and offers no way to read a preset's stored routing back. So the only
-        # preset we can honestly report is one we applied ourselves; before
-        # that, and after a restart, the answer is "unknown".
+        # The firmware reports preset names but never says which one is active.
+        # So the only preset we can honestly report is one we applied
+        # ourselves; before that, and after a restart, the answer is "unknown".
         self.active_preset: int | None = None
+        # Preset contents and EDID selections survive here, because they do
+        # not survive on the device: flashing firmware wipes the slots and
+        # resets every input's EDID, and only the telnet CLI can read a slot
+        # back at all.
+        self._backup_store: Store[dict[str, Any]] = Store(
+            hass, _BACKUP_STORAGE_VERSION, f"{DOMAIN}.preset_backup_{entry.entry_id}"
+        )
+        self.preset_backup: dict[int, PresetBackupSlot] = {}
+        self.edid_backup: dict[int, int] = {}
+        self.preset_backup_saved_at: str | None = None
+        self.preset_backup_drift: list[int] = []
+        self.edid_backup_drift: list[int] = []
+        self._preset_applied_at: float | None = None
 
     async def _async_update_data(self) -> MatrixState:
         """Fetch the current matrix state."""
@@ -81,6 +111,8 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         # every entity go unknown at once on each power change.
         if not state.output_names and self.data is not None:
             return replace(self.data, power=state.power)
+
+        self._refresh_backup_drift(state)
         return state
 
     async def _async_write(
@@ -195,7 +227,12 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         )
 
     async def async_set_edid(self, source: int, profile: int) -> None:
-        """Set the EDID profile on a one-based input."""
+        """Set the EDID profile on a one-based input.
+
+        A backed-up input follows along, so a deliberate change through Home
+        Assistant does not read as drift. Changes made in the device web UI
+        still need the backup button.
+        """
 
         def apply() -> None:
             if source <= len(self.data.input_edids):
@@ -206,6 +243,9 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
             f"set the EDID on input {source}",
             apply,
         )
+        if source in self.edid_backup:
+            self.edid_backup[source] = profile
+            await self._async_persist_backup()
 
     async def async_set_panel_locked(self, *, locked: bool) -> None:
         """Lock or unlock the front panel."""
@@ -292,10 +332,12 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         )
 
     async def async_clear_preset(self, index: int) -> None:
-        """Empty a preset slot."""
+        """Empty a preset slot, and drop it from the backup."""
         await self._async_write(
             self.client.async_clear_preset(index), f"clear preset {index}", None
         )
+        if self.preset_backup.pop(index, None) is not None:
+            await self._async_persist_backup()
 
     async def async_rename(self, kind: str, index: int, name: str) -> None:
         """Rename an input, an output or a preset.
@@ -319,6 +361,12 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
                 names[index - 1] = name
 
         await self._async_write(call(index, name), f"rename {kind} {index}", apply)
+
+        # Keep the backup's name in step, or the drift sensor would read a
+        # deliberate rename as a wiped device.
+        if kind == "preset" and index in self.preset_backup:
+            self.preset_backup[index]["name"] = name
+            await self._async_persist_backup()
 
     async def async_set_baud_rate(self, rate: int) -> None:
         """Set the RS-232 rate on the serial control port."""
@@ -355,17 +403,196 @@ class HdcvtMatrixCoordinator(DataUpdateCoordinator[MatrixState]):
         )
 
     async def async_save_preset(self, index: int) -> None:
-        """Store the current routing into a one-based preset slot."""
+        """Store the current routing into a one-based preset slot.
+
+        The backup learns the slot at the same time: a save through Home
+        Assistant snapshots the routes we already hold, no telnet read
+        needed. Saves made in the device web UI still need the backup
+        button.
+        """
         await self._async_write(
             self.client.async_save_preset(index), f"save preset {index}", None
         )
+        if index <= len(self.data.preset_names):
+            self.preset_backup[index] = {
+                "name": self.data.preset_names[index - 1],
+                "routes": list(self.data.routes),
+            }
+            await self._async_persist_backup()
 
     async def async_apply_preset(self, index: int) -> None:
-        """Recall a preset and remember it as the active one."""
+        """Recall a preset and remember it as the active one.
+
+        The matrix takes 3-5 s to settle after a recall, switching every
+        output as it goes; a second recall inside that window lands on a
+        device still mid-transition. Refused with an error rather than
+        queued, so the user sees why nothing happened.
+        """
+        now = time.monotonic()
+        if (
+            self._preset_applied_at is not None
+            and now - self._preset_applied_at < PRESET_APPLY_COOLDOWN
+        ):
+            remaining = PRESET_APPLY_COOLDOWN - (now - self._preset_applied_at)
+            raise HomeAssistantError(
+                f"The matrix is still applying the previous preset; "
+                f"try again in {max(1, round(remaining))} seconds"
+            )
+        # Armed before the write goes out, or two quick recalls would both
+        # pass the check and queue up behind the client's lock.
+        self._preset_applied_at = now
 
         def apply() -> None:
             self.active_preset = index
 
-        await self._async_write(
-            self.client.async_apply_preset(index), f"recall preset {index}", apply
+        try:
+            await self._async_write(
+                self.client.async_apply_preset(index), f"recall preset {index}", apply
+            )
+        except Exception:
+            # A recall that never happened should not lock the user out.
+            self._preset_applied_at = None
+            raise
+
+    async def async_load_preset_backup(self) -> None:
+        """Load the preset backup persisted for this entry."""
+        stored = await self._backup_store.async_load()
+        if not stored:
+            return
+        self.preset_backup = {
+            int(slot): value for slot, value in stored.get("presets", {}).items()
+        }
+        self.edid_backup = {
+            int(source): value
+            for source, value in stored.get("input_edids", {}).items()
+        }
+        self.preset_backup_saved_at = stored.get("saved_at")
+        self._refresh_backup_drift()
+
+    def _refresh_backup_drift(self, state: MatrixState | None = None) -> None:
+        """Recompute what no longer matches the backup.
+
+        Preset names and EDID ids both ride along in every poll for free,
+        and a firmware flash — the event this exists to catch — resets both.
+        Preset contents are only readable over telnet, so they are
+        deliberately not compared on the polling path.
+        """
+        data = state if state is not None else self.data
+        names = data.preset_names if data is not None else []
+        edids = data.input_edids if data is not None else []
+        self.preset_backup_drift = [
+            slot
+            for slot, backup in sorted(self.preset_backup.items())
+            if slot <= len(names) and names[slot - 1] != backup["name"]
+        ]
+        self.edid_backup_drift = [
+            source
+            for source, profile in sorted(self.edid_backup.items())
+            if source <= len(edids) and edids[source - 1] != profile
+        ]
+
+    async def _async_persist_backup(self) -> None:
+        """Write the backup to storage and refresh the drift sensor."""
+        self.preset_backup_saved_at = dt_util.utcnow().isoformat()
+        await self._backup_store.async_save(
+            {
+                "saved_at": self.preset_backup_saved_at,
+                "presets": {
+                    str(slot): value for slot, value in self.preset_backup.items()
+                },
+                "input_edids": {
+                    str(source): value for source, value in self.edid_backup.items()
+                },
+            }
         )
+        self._refresh_backup_drift()
+        self.async_update_listeners()
+
+    async def async_snapshot_presets(self) -> None:
+        """Persist every preset slot and every input's EDID selection.
+
+        Preset contents come over telnet, the only channel that can read
+        them; the EDID ids are already in the polled state.
+        """
+        names = self.data.preset_names
+        presets: dict[int, PresetBackupSlot] = {}
+        try:
+            for slot in range(1, len(names) + 1):
+                routes = await self.telnet.async_read_preset(slot)
+                if routes is not None:
+                    presets[slot] = {"name": names[slot - 1], "routes": routes}
+        except MatrixError as err:
+            raise HomeAssistantError(f"Could not back up the presets: {err}") from err
+
+        # An all-empty device is what a fresh wipe looks like; overwriting a
+        # good backup with that would destroy the one copy worth having.
+        if not presets:
+            raise HomeAssistantError(
+                "The matrix reports no saved presets; nothing was backed up"
+            )
+
+        self.preset_backup = presets
+        self.edid_backup = {
+            source: profile
+            for source, profile in enumerate(self.data.input_edids, start=1)
+        }
+        await self._async_persist_backup()
+
+    async def _async_push_backup(self, live: list[int]) -> None:
+        """Drive the device through each backed-up slot, then back.
+
+        ``live`` mirrors the device's routing as writes land, so a route
+        already in place is skipped: fewer writes, less display flicker.
+        """
+        original = list(live)
+
+        async def switch(output: int, source: int) -> None:
+            if output <= len(live) and live[output - 1] == source:
+                return
+            await self.client.async_set_route(output, source)
+            if output <= len(live):
+                live[output - 1] = source
+
+        for slot, backup in sorted(self.preset_backup.items()):
+            for output, source in enumerate(backup["routes"], start=1):
+                await switch(output, source)
+            await self.client.async_save_preset(slot)
+            await self.client.async_set_preset_name(slot, backup["name"])
+        for output, source in enumerate(original, start=1):
+            await switch(output, source)
+
+    async def async_restore_presets(self) -> None:
+        """Rebuild the preset slots and EDID selections from the backup.
+
+        The firmware can only save a preset from the live routing, so each
+        slot is applied, saved and renamed in turn, and the routing that was
+        in effect beforehand is put back at the end. Displays flick through
+        the scenarios while this runs; EDID writes follow, and sources
+        re-handshake briefly.
+        """
+        if not self.preset_backup:
+            raise HomeAssistantError("There is no preset backup to restore")
+
+        try:
+            await self._async_push_backup(list(self.data.routes))
+            for source, profile in sorted(self.edid_backup.items()):
+                if (
+                    source <= len(self.data.input_edids)
+                    and self.data.input_edids[source - 1] != profile
+                ):
+                    await self.client.async_set_edid(source, profile)
+        except MatrixAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except MatrixError as err:
+            raise HomeAssistantError(f"Could not restore the presets: {err}") from err
+
+        # Reflect the restored names and EDIDs at once; the refresh confirms.
+        for slot, backup in self.preset_backup.items():
+            if slot <= len(self.data.preset_names):
+                self.data.preset_names[slot - 1] = backup["name"]
+        for source, profile in self.edid_backup.items():
+            if source <= len(self.data.input_edids):
+                self.data.input_edids[source - 1] = profile
+        self._refresh_backup_drift()
+        self.async_update_listeners()
+        await self.async_request_refresh()

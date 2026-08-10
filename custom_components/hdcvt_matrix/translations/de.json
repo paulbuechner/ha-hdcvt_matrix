@@ -74,6 +74,9 @@
       },
       "output_sink": {
         "name": "{name} Anzeige"
+      },
+      "preset_backup": {
+        "name": "Konfigurationssicherung abweichend"
       }
     },
     "button": {
@@ -91,6 +94,12 @@
       },
       "net_reboot": {
         "name": "Netzwerkmodul neu starten"
+      },
+      "backup_presets": {
+        "name": "Presets und EDIDs sichern"
+      },
+      "restore_presets": {
+        "name": "Presets und EDIDs wiederherstellen"
       },
       "clear_preset": {
         "name": "{name} leeren"
@@ -290,7 +299,7 @@
         "edid": "EDID je Eingang",
         "output_switches": "Stream, Ton stumm und ARC je Ausgang",
         "signal_sensors": "Signal- und Anzeigeerkennung",
-        "preset_management": "Presets speichern und leeren",
+        "preset_management": "Preset-Verwaltung: speichern, leeren, sichern und wiederherstellen",
         "cec": "CEC-Anzeigesteuerung",
         "ext_audio": "Ausgekoppeltes Audio",
         "system": "Frontpanel, Seriell und Neustart",

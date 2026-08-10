@@ -47,6 +47,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: HdcvtMatrixConfigEntry) 
 
     coordinator = HdcvtMatrixCoordinator(hass, entry, client, info)
     await coordinator.async_config_entry_first_refresh()
+    # Loaded before the platforms, so the backup sensor and restore button
+    # start with the persisted state rather than flickering into it.
+    await coordinator.async_load_preset_backup()
     entry.runtime_data = coordinator
 
     # Registered explicitly so the device carries its name and identity even if

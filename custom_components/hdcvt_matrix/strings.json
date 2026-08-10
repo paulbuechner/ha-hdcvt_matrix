@@ -74,6 +74,9 @@
       },
       "output_sink": {
         "name": "{name} display"
+      },
+      "preset_backup": {
+        "name": "Config backup mismatch"
       }
     },
     "button": {
@@ -91,6 +94,12 @@
       },
       "net_reboot": {
         "name": "Reboot network module"
+      },
+      "backup_presets": {
+        "name": "Back up presets and EDIDs"
+      },
+      "restore_presets": {
+        "name": "Restore presets and EDIDs"
       },
       "clear_preset": {
         "name": "Clear {name}"
@@ -290,7 +299,7 @@
         "edid": "Per-input EDID",
         "output_switches": "Per-output stream, audio mute and ARC",
         "signal_sensors": "Signal and display detection",
-        "preset_management": "Preset save and clear buttons",
+        "preset_management": "Presets Management: save, clear, backup and restore",
         "cec": "CEC display control",
         "ext_audio": "De-embedded audio",
         "system": "Front panel, serial and reboot",
