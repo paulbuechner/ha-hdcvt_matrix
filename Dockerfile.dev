@@ -6,7 +6,7 @@
 #
 #   docker build -f Dockerfile.dev -t hdcvt-matrix-dev .
 #   docker run --rm -v "$PWD:/w" hdcvt-matrix-dev pytest -q
-FROM python:3.13
+FROM python:3.13@sha256:ecbe213fb818d557fd19db4078244339e2e2e52874f9c81052d3094ea114d797
 
 LABEL org.opencontainers.image.title="ha-hdcvt_matrix dev"
 LABEL org.opencontainers.image.description="Linux test environment for the HDCVT \
