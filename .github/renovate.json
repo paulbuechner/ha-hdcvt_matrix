@@ -4,7 +4,9 @@
   "timezone": "Europe/Berlin",
   "minimumReleaseAge": "3 days",
   "osvVulnerabilityAlerts": true,
-  "dependencyDashboardOSVVulnerabilitySummary": "all",
+  "dependencyDashboard": {
+    "osvVulnerabilitySummary": "all"
+  },
   "commitMessagePrefix": "build:",
   "packageRules": [
     {
